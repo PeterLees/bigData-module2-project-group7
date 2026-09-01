@@ -1,0 +1,13 @@
+name: kaggle
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - ipykernel=7.1.0
+  - kagglehub=1.0.2
+  - matplotlib=3.10.7
+  - pandas=2.3.3
+  - pip=25.3
+  - python=3.11.14
+  - pip:
+      - meltano==4.0.8
