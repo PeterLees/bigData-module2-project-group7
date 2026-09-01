@@ -1,0 +1,73 @@
+default_environment: dev
+project_id: 01a057d1-636c-7d73-a232-7fc3ee6b8b5e
+environments:
+- name: dev
+- name: staging
+- name: prod
+plugins:
+  extractors:
+  - name: tap-csv
+    namespace: tap_csv
+    variant: meltanolabs
+    pip_url: git+https://github.com/MeltanoLabs/tap-csv.git
+    config:
+      files:
+      - entity: product_category_name_translation
+        path: ./data/brazilian_ecommerce/product_category_name_translation.csv
+        keys:
+        - product_category_name
+      - entity: olist_customers_dataset
+        path: ./data/brazilian_ecommerce/olist_customers_dataset.csv
+        keys:
+        - customer_id
+      - entity: olist_geolocation_dataset
+        path: ./data/brazilian_ecommerce/olist_geolocation_dataset.csv
+        keys:
+        - geolocation_zip_code_prefix
+      - entity: olist_order_items_dataset
+        path: ./data/brazilian_ecommerce/olist_order_items_dataset.csv
+        keys:
+        - order_id 
+        - order_item_id
+      - entity: olist_order_payments_dataset
+        path: ./data/brazilian_ecommerce/olist_order_payments_dataset.csv
+        keys:
+        - order_id
+        - payment_sequential
+      - entity: olist_order_reviews_dataset
+        path: ./data/brazilian_ecommerce/olist_order_reviews_dataset.csv
+        keys:
+        - review_id
+      - entity: olist_orders_dataset
+        path: ./data/brazilian_ecommerce/olist_orders_dataset.csv
+        keys:
+        - order_id
+      - entity: olist_products_dataset
+        path: ./data/brazilian_ecommerce/olist_products_dataset.csv
+        keys:
+        - product_id
+      - entity: olist_sellers_dataset
+        path: ./data/brazilian_ecommerce/olist_sellers_dataset.csv
+        keys:
+        - seller_id
+  loaders:
+  - name: target-jsonl
+    variant: andyh1203
+    pip_url: target-jsonl
+  - name: target-bigquery
+    variant: z3z1ma
+    pip_url: git+https://github.com/z3z1ma/target-bigquery.git
+    config:
+      dataset: <fill in your dataset name>
+      denormalized: true
+      flattening_enabled: true
+      flattening_max_depth: 1
+      method: batch_job
+      project: <fill in your project name>
+  utilities:
+  - name: kaggle-extractor
+    namespace: kaggle_extractor
+    commands:
+      download:
+        args: download_kaggle.py
+        executable: python
