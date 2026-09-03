@@ -1,0 +1,7 @@
+# dim_date.sql calls dbt_utils.date_spine(), a package macro. sqlfluff's jinja
+# templater cannot resolve macros from an installed dbt package without the dbt
+# templater, which in turn needs a live warehouse profile -- and requiring
+# credentials would make linting impossible on a fork or in a credential-free CI
+# job. The model is still fully covered by `dbt parse` in CI and by its own dbt
+# tests, so nothing goes unchecked; only the style linter skips it.
+models/marts/dim_date.sql

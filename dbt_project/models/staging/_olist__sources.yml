@@ -1,0 +1,117 @@
+version: 2
+
+sources:
+  - name: olist_raw
+    description: >
+      Immutable landing tables loaded by ingestion/load_olist.py from the Kaggle
+      Olist Brazilian E-Commerce export. Source column names and types are
+      preserved exactly as they appear in the CSV files, including the two
+      misspelled product columns, so that a defect stays reproducible here after
+      it has been corrected downstream. Every table carries the ingestion
+      metadata columns _batch_id, _loaded_at, _source_uri and _source_sha256.
+    database: "{{ env_var('GCP_PROJECT_ID') }}"
+    schema: "{{ env_var('BQ_DATASET_RAW', 'olist_raw') }}"
+
+    tables:
+      - name: orders
+        description: One row per order. The delivery milestones on this table are the spine of the entire project.
+        columns:
+          - name: order_id
+            description: Natural key of the order. 32-character hash.
+            data_tests: [unique, not_null]
+          - name: customer_id
+            description: Per-ORDER customer identifier, not a person. Resolve to customer_unique_id before any customer analysis.
+            data_tests: [not_null]
+          - name: order_status
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: [delivered, shipped, canceled, unavailable, invoiced, processing, created, approved]
+          - name: order_purchase_timestamp
+            description: When the customer placed the order. The event time for all trend analysis.
+            data_tests: [not_null]
+          - name: order_estimated_delivery_date
+            description: The delivery date promised to the customer at purchase. The benchmark for lateness.
+
+      - name: order_items
+        description: One row per item line within an order. Carries price and freight.
+        columns:
+          - name: order_id
+            data_tests: [not_null]
+          - name: order_item_id
+            description: Sequence number of the line within the order, starting at 1. Not globally unique.
+            data_tests: [not_null]
+          - name: product_id
+            data_tests: [not_null]
+          - name: seller_id
+            data_tests: [not_null]
+          - name: price
+            data_tests: [not_null]
+
+      - name: order_payments
+        description: >
+          One row per payment record. An order may have several. Must be
+          aggregated to order grain before joining to anything, or revenue
+          multiplies.
+        columns:
+          - name: order_id
+            data_tests: [not_null]
+          - name: payment_type
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: [credit_card, boleto, voucher, debit_card, not_defined]
+
+      - name: order_reviews
+        description: >
+          Customer review of an order. review_id is NOT unique in the source and
+          some orders carry more than one review, so this must be deduplicated
+          to order grain in int_order_reviews.
+        columns:
+          - name: order_id
+            data_tests: [not_null]
+          - name: review_score
+            description: Integer 1-5. The satisfaction measure the delivery business case is judged against.
+
+      - name: customers
+        description: Bridge from the per-order customer_id to the stable customer_unique_id.
+        columns:
+          - name: customer_id
+            data_tests: [unique, not_null]
+          - name: customer_unique_id
+            description: The stable identity of a person across orders. The correct grain for dim_customer.
+            data_tests: [not_null]
+          - name: customer_state
+            description: Two-letter Brazilian state code. The destination half of a delivery route.
+            data_tests: [not_null]
+
+      - name: products
+        description: Product attributes. Note the source misspellings product_name_lenght and product_description_lenght.
+        columns:
+          - name: product_id
+            data_tests: [unique, not_null]
+
+      - name: sellers
+        description: Seller attributes. seller_state is the origin half of a delivery route.
+        columns:
+          - name: seller_id
+            data_tests: [unique, not_null]
+          - name: seller_state
+            data_tests: [not_null]
+
+      - name: geolocation
+        description: >
+          Roughly one million latitude/longitude points keyed by zip-code
+          prefix, with many rows per prefix. Must be collapsed to one row per
+          prefix before it touches any dimension.
+        columns:
+          - name: geolocation_zip_code_prefix
+            data_tests: [not_null]
+
+      - name: product_category_translation
+        description: Portuguese to English product category names.
+        columns:
+          - name: product_category_name
+            data_tests: [unique, not_null]
+          - name: product_category_name_english
+            data_tests: [not_null]

@@ -1,0 +1,601 @@
+<!--
+  SOURCE OF docs/Module2_Group7_Runbook.pdf
+
+  The PDF is generated from this file rather than exported from Word, because a
+  PDF embeds its own font subsets and therefore renders identically on every
+  machine, which a .docx does not.
+
+  To regenerate:
+
+    CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    "$CHROME" --headless --disable-gpu --no-pdf-header-footer \
+      --print-to-pdf=raw.pdf "file://$PWD/docs/pdf-source/runbook.html"
+
+    pip install pypdf reportlab
+    python docs/pdf-source/stamp_page_numbers.py raw.pdf \
+      docs/Module2_Group7_Runbook.pdf
+
+  Chrome can only emit its own header/footer, which includes the local file://
+  URL, so the page is rendered clean and the footer is stamped on afterwards.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Module 2 Group 7 — Runbook</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+
+  :root{
+    --navy:#1f3864; --blue:#2e5c8a; --grey:#595959; --rule:#c9d3dd;
+    --zebra:#f2f5fa; --code:#f4f4f4; --warn:#fdf2e3; --warnbar:#c55a11;
+    --info:#e8eef7; --good:#eaf3ea; --ink:#1a1a1a;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{
+    font-family:Helvetica,Arial,sans-serif;
+    font-size:9.6pt; line-height:1.5; color:var(--ink); margin:0;
+  }
+
+  /* ---------- cover ---------- */
+  .cover{ page-break-after:always; padding-top:52mm; }
+  .cover .eyebrow{ font-size:9pt; font-weight:700; color:var(--blue); letter-spacing:.09em; }
+  .cover h1{ font-size:30pt; color:var(--navy); margin:.28em 0 .1em; line-height:1.12; }
+  .cover .sub{ font-size:14pt; color:var(--grey); padding-bottom:.5em; border-bottom:2px solid var(--navy); }
+  .cover .meta{ margin-top:1.4em; font-size:10pt; }
+  .cover .meta strong{ font-size:11pt; }
+  .cover .meta .dim{ color:var(--grey); }
+
+  /* ---------- headings ---------- */
+  h1{
+    font-size:16pt; color:var(--navy); margin:0 0 .5em;
+    padding-bottom:.22em; border-bottom:1.5px solid var(--navy);
+    page-break-after:avoid; page-break-before:always;
+  }
+  h1.nobreak{ page-break-before:auto; }
+  /* the cover title must not trigger the global section page break */
+  .cover h1{ page-break-before:avoid; border-bottom:none; padding-bottom:0; }
+  h2{ font-size:12pt; color:var(--blue); margin:1.5em 0 .45em; page-break-after:avoid; }
+  h3{ font-size:10.5pt; color:#333; margin:1.2em 0 .35em; page-break-after:avoid; }
+  p{ margin:0 0 .62em; }
+  .lede{ color:var(--grey); font-style:italic; margin:-.2em 0 .9em; }
+
+  /* ---------- lists ---------- */
+  ol,ul{ margin:.2em 0 .9em; padding-left:1.5em; }
+  li{ margin-bottom:.34em; }
+  ol.steps > li{ margin-bottom:.6em; }
+  ul.check{ list-style:none; padding-left:.2em; }
+  ul.check li:before{ content:"\2610\00a0\00a0"; font-family:Menlo,"Courier New",monospace; }
+
+  /* ---------- code ---------- */
+  pre{
+    font-family:Menlo,"Courier New",monospace; font-size:8.4pt; line-height:1.42;
+    background:var(--code); border-left:3px solid #bfbfbf;
+    padding:.5em .75em; margin:.45em 0 .7em; white-space:pre-wrap;
+    page-break-inside:avoid;
+  }
+  code{ font-family:Menlo,"Courier New",monospace; font-size:8.6pt; background:#f0f2f5; padding:.05em .3em; border-radius:2px; }
+  .note{ font-size:8.8pt; color:var(--grey); margin:-.35em 0 .85em; }
+  .verify{ font-weight:700; font-size:9pt; margin:.75em 0 .1em; }
+
+  /* ---------- callouts ---------- */
+  .callout{
+    padding:.6em .85em; margin:.85em 0; page-break-inside:avoid;
+    background:var(--warn); border-left:4px solid var(--warnbar);
+  }
+  .callout.info{ background:var(--info); border-left-color:var(--navy); }
+  .callout .lbl{ font-weight:700; color:var(--warnbar); }
+  .callout.info .lbl{ color:var(--navy); }
+
+  /* ---------- tables ---------- */
+  table{ width:100%; border-collapse:collapse; margin:.5em 0 1em; font-size:8.6pt; page-break-inside:auto; }
+  thead{ display:table-header-group; }
+  tr{ page-break-inside:avoid; }
+  th{ background:var(--navy); color:#fff; text-align:left; font-weight:700; }
+  th,td{ border:.5px solid var(--rule); padding:.4em .55em; vertical-align:top; }
+  tbody tr:nth-child(even){ background:var(--zebra); }
+  td.k{ font-weight:700; color:var(--navy); white-space:nowrap; }
+  code.t{ font-size:8.2pt; background:none; padding:0; }
+
+  /* pipeline flow rows */
+  table.flow td:first-child{ width:20%; font-weight:700; color:var(--navy); }
+  table.flow tr.gate td{ background:var(--warn); }
+  table.flow tr.gate td:first-child{ color:var(--warnbar); }
+  table.flow tr.serve td{ background:var(--good); }
+  table.flow tbody tr:nth-child(even){ background:transparent; }
+  table.flow tbody tr:nth-child(even) td{ background:#fafbfd; }
+  table.flow tr.gate td, table.flow tr.serve td{ background:var(--warn) !important; }
+  table.flow tr.serve td{ background:var(--good) !important; }
+
+  .toc a{ color:var(--ink); text-decoration:none; }
+  .toc li{ margin-bottom:.28em; }
+  .toc .s{ color:var(--grey); font-size:8.8pt; }
+</style>
+</head>
+<body>
+
+<!-- ============================ COVER ============================ -->
+<section class="cover">
+  <div class="eyebrow">BIG DATA &middot; MODULE 2 &middot; GROUP 7</div>
+  <h1>Runbook: How to Run the Project</h1>
+  <div class="sub">From an empty machine to the live dashboard</div>
+  <div class="meta">
+    <p><strong>Olist delivery-performance pipeline</strong></p>
+    <p class="dim">Repository: github.com/PeterLees/bigData-module2-project-group7</p>
+    <p class="dim">Companion to: Module2_Group7_Development_Plan.docx</p>
+  </div>
+  <div class="callout info" style="margin-top:2.2em">
+    <span class="lbl">STEPS 1 TO 5 ARE DONE ONCE. AFTER THAT, ONLY STEPS 6 AND 7 ARE NEEDED.</span>
+    <p style="margin:.5em 0 0">Follow the steps in order. Each one ends with a verification command, and you
+    should not move on until it passes. <strong>Read Section 1 first:</strong> it says which steps only one
+    person performs, and which every member must run on their own machine.</p>
+  </div>
+</section>
+
+<!-- ============================ TOC ============================ -->
+<h1 class="nobreak">Contents</h1>
+<ol class="toc">
+  <li><a href="#s1">Before You Start</a> <span class="s">— who does what; the two first-run fixes</span></li>
+  <li><a href="#s2">Step 1 — Python Environment</a></li>
+  <li><a href="#s3">Step 2 — Create the GCP Project</a> <span class="s">— Platform Owner only</span></li>
+  <li><a href="#s4">Step 3 — Authenticate Locally</a> <span class="s">— every member</span></li>
+  <li><a href="#s5">Step 4 — Download the Dataset</a></li>
+  <li><a href="#s6">Step 5 — Bucket, Datasets and Config</a></li>
+  <li><a href="#s7">Step 6 — Run the Pipeline</a></li>
+  <li><a href="#s8">Step 7 — Open the Dashboard</a></li>
+  <li><a href="#s9">Optional Outputs</a></li>
+  <li><a href="#s10">Troubleshooting</a></li>
+  <li><a href="#s11">What Has and Has Not Been Verified</a></li>
+</ol>
+
+<!-- ============================ 1 ============================ -->
+<h1 id="s1">1. Before You Start</h1>
+<p>This runbook takes a machine with nothing installed and ends with the interactive dashboard open in a
+browser. It assumes you have cloned the repository and can open a terminal in it.</p>
+
+<h2>1.1 Who does what, and how often</h2>
+<table>
+  <thead><tr><th style="width:7%">Step</th><th style="width:33%">What</th><th style="width:32%">Who runs it</th><th>How often</th></tr></thead>
+  <tbody>
+    <tr><td class="k">1</td><td>Create the Python environment</td><td>Every member</td><td>Once per machine</td></tr>
+    <tr><td class="k">2</td><td>Create the GCP project, billing, APIs, team access</td><td>Platform Owner only</td><td>Once for the team</td></tr>
+    <tr><td class="k">3</td><td>Authenticate gcloud locally</td><td>Every member</td><td>Once per machine</td></tr>
+    <tr><td class="k">4</td><td>Download the Olist dataset from Kaggle</td><td>Whoever will run the load</td><td>Once</td></tr>
+    <tr><td class="k">5</td><td>Create the bucket, the datasets and the config files</td><td>Platform Owner creates the shared datasets; every member creates their own dev dataset and config</td><td>Once</td></tr>
+    <tr><td class="k">6</td><td>Run the pipeline: <code class="t">make all</code></td><td>Anyone</td><td>Every time data or models change</td></tr>
+    <tr><td class="k">7</td><td>Open the dashboard: <code class="t">make dashboard</code></td><td>Anyone</td><td>Any time</td></tr>
+  </tbody>
+</table>
+
+<h2>1.2 Two things that were fixed for the first run</h2>
+<p>Both were real defects that would have stopped the very first run. They are already corrected in the
+repository; this note exists so the team understands why the Makefile looks the way it does.</p>
+<table>
+  <thead><tr><th style="width:38%">What was wrong</th><th>How it is handled now</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>dbt could not see <code class="t">.env</code>.</strong> python-dotenv loads <code class="t">.env</code> for the
+      Python scripts, but dbt resolves <code class="t">env_var()</code> against the real process environment, so every
+      dbt target failed with <em>“Env var required but not provided: GCP_PROJECT_ID”</em>.</td>
+      <td>The Makefile now includes and exports <code class="t">.env</code> automatically, so every target sees it.
+      Nothing to remember and nothing to type.</td>
+    </tr>
+    <tr>
+      <td><strong><code class="t">make all</code> ran the snapshot before the models.</strong> The snapshot reads
+      <code class="t">stg_products</code>, a view that does not exist yet on a fresh warehouse, so the first run always
+      failed. The step was also redundant, because <code class="t">dbt build</code> already runs snapshots in
+      dependency order.</td>
+      <td>The separate snapshot step was removed from the pipeline. <code class="t">dbt build</code> handles it in the
+      correct order. The same ordering bug was fixed in the nightly GitHub Actions workflow.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================ 2 ============================ -->
+<h1 id="s2">2. Step 1 — Python Environment</h1>
+<p class="lede">Every member. Approximately 10 minutes.</p>
+
+<div class="callout">
+  <span class="lbl">PYTHON VERSION MATTERS.</span>
+  The system default <code class="t">python3</code> on this machine is 3.14, which dbt does not support. The project is
+  pinned to Python 3.11. Installing into the wrong interpreter is the single most common way this setup goes
+  wrong, and the error it produces is confusing.
+</div>
+
+<pre>conda create -y -n bd-m2-g7 python=3.11</pre>
+<pre>conda activate bd-m2-g7</pre>
+<pre>cd /path/to/bigData-module2-project-group7
+make setup</pre>
+<p class="note"><code class="t">make setup</code> installs <code class="t">requirements.txt</code> and then runs <code class="t">dbt deps</code> to fetch the
+dbt_utils and dbt_expectations packages.</p>
+
+<p class="verify">Verify:</p>
+<pre>python --version</pre>
+<p class="note">Must print <code class="t">Python 3.11.x</code>. If it prints 3.14, the conda environment is not active.</p>
+
+<!-- ============================ 3 ============================ -->
+<h1 id="s3">3. Step 2 — Create the GCP Project</h1>
+<p class="lede">Platform Owner only, once for the whole team. Approximately 15 minutes.</p>
+
+<ol class="steps">
+  <li>Open <code class="t">https://console.cloud.google.com</code> and sign in with the Google account that will own the
+  project. Use an account you will still control at submission time.</li>
+
+  <li><strong>Enable billing.</strong> In the left menu choose Billing, then “Link a billing account”. A new Google
+  Cloud account receives a 300 USD, 90-day free trial. Billing has to be enabled for the BigQuery API to
+  function at all, but the always-free tier (1 TB of query scan and 10 GB of storage per month) covers this
+  entire project many times over, because the dataset is only about 120 MB. <strong>Expected real spend: zero.</strong></li>
+
+  <li><strong>Create the project.</strong> Click the project selector at the top of the console, then “New Project”.
+  Name it <code class="t">bigdata-m2-group7</code>. Google appends digits to make a globally unique <strong>Project ID</strong>, for
+  example <code class="t">bigdata-m2-group7-473012</code>. Copy that Project ID: it is <em>not</em> the same as the display name,
+  and every member needs it.</li>
+
+  <li><strong>Enable the APIs.</strong> Go to “APIs and Services”, then “Enable APIs and Services”. Search for and enable
+  the <strong>BigQuery API</strong>, then do the same for the <strong>Cloud Storage API</strong>. Each takes about 30 seconds to
+  activate.</li>
+
+  <li><strong>Invite the team.</strong> Go to “IAM and Admin”, then “IAM”, click “Grant access”, and add each teammate’s
+  Google email with the role <strong>BigQuery Job User</strong>. This lets them run queries but not delete datasets.
+  Finer dataset-level permissions are granted in Step 5.</li>
+</ol>
+
+<p class="verify">Verify:</p>
+<pre>gcloud projects describe &lt;PROJECT_ID&gt;</pre>
+<p class="note">The output must include <code class="t">lifecycleState: ACTIVE</code>. Then post the Project ID in the team chat,
+because everyone needs it in Step 5.</p>
+
+<!-- ============================ 4 ============================ -->
+<h1 id="s4">4. Step 3 — Authenticate Locally</h1>
+<p class="lede">Every member, on their own machine. Approximately 5 minutes.</p>
+<p>Run these three commands in order. The first two open a browser window; approve with the same Google
+account that was invited in Step 2.</p>
+
+<pre>gcloud auth login</pre>
+<p class="note">Grants the <code class="t">gcloud</code> and <code class="t">bq</code> command-line tools access to your account.</p>
+
+<pre>gcloud auth application-default login</pre>
+<p class="note">Creates the <strong>Application Default Credentials</strong> that dbt, the Python client library, SQLAlchemy
+and the dashboard all read. This is a <em>separate</em> credential from the one above. Skipping it is the number one
+cause of <em>“could not automatically determine credentials”</em> later on.</p>
+
+<pre>gcloud config set project &lt;PROJECT_ID&gt;</pre>
+
+<p class="verify">Verify:</p>
+<pre>bq ls</pre>
+<p class="note">This must return without an authentication error. It will list the datasets once Step 5 is done.</p>
+
+<div class="callout">
+  <span class="lbl">NEVER DOWNLOAD A SERVICE-ACCOUNT KEY FOR LOCAL WORK.</span>
+  User OAuth makes every BigQuery job attributable to a person, which is what the course access-control
+  guidance requires. The only service account in this project is for GitHub Actions, and its key lives solely
+  in GitHub Secrets. A leaked service-account key in a public repository is an immediate and serious finding.
+</div>
+
+<!-- ============================ 5 ============================ -->
+<h1 id="s5">5. Step 4 — Download the Dataset</h1>
+<p class="lede">Whoever will run the load. Approximately 5 minutes.</p>
+
+<ol class="steps">
+  <li>Open <code class="t">https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce</code> and sign in. A free Kaggle
+  account is required to download.</li>
+  <li>Click <strong>Download</strong>. The archive is about 45 MB compressed, roughly 120 MB unzipped. Unzip it into
+  <code class="t">data/raw/</code> inside the project folder.</li>
+  <li>Or, with the Kaggle CLI, after placing your API token at <code class="t">~/.kaggle/kaggle.json</code> with permissions 600:</li>
+</ol>
+<pre>kaggle datasets download -d olistbr/brazilian-ecommerce \
+  -p data/raw --unzip</pre>
+
+<p class="verify">Verify:</p>
+<pre>ls data/raw/*.csv | wc -l</pre>
+<p class="note">Must print <code class="t">9</code>. The expected row counts, which the load reconciles against, are:</p>
+
+<table>
+  <thead><tr><th style="width:38%">File</th><th style="width:14%">Rows</th><th>Feeds</th></tr></thead>
+  <tbody>
+    <tr><td><code class="t">olist_orders_dataset.csv</code></td><td>99,441</td><td><code class="t">fct_orders</code>, and every delivery measure</td></tr>
+    <tr><td><code class="t">olist_order_items_dataset.csv</code></td><td>112,650</td><td><code class="t">fct_order_items</code>, the revenue backbone</td></tr>
+    <tr><td><code class="t">olist_order_payments_dataset.csv</code></td><td>103,886</td><td><code class="t">fct_payments</code> (aggregated to order grain first)</td></tr>
+    <tr><td><code class="t">olist_order_reviews_dataset.csv</code></td><td>99,224</td><td>the review score on <code class="t">fct_orders</code> (deduplicated)</td></tr>
+    <tr><td><code class="t">olist_customers_dataset.csv</code></td><td>99,441</td><td><code class="t">dim_customer</code>, keyed on the person</td></tr>
+    <tr><td><code class="t">olist_products_dataset.csv</code></td><td>32,951</td><td><code class="t">dim_product</code></td></tr>
+    <tr><td><code class="t">olist_sellers_dataset.csv</code></td><td>3,095</td><td><code class="t">dim_seller</code></td></tr>
+    <tr><td><code class="t">olist_geolocation_dataset.csv</code></td><td>1,000,163</td><td>coordinates, collapsed to one row per zip prefix</td></tr>
+    <tr><td><code class="t">product_category_name_translation.csv</code></td><td>71</td><td>English category names</td></tr>
+  </tbody>
+</table>
+<p><code class="t">data/</code> is in <code class="t">.gitignore</code>, so raw CSVs never enter the repository. Other members either download the
+file themselves or pull it from the GCS bucket after Step 6.</p>
+
+<!-- ============================ 6 ============================ -->
+<h1 id="s6">6. Step 5 — Bucket, Datasets and Config</h1>
+<p class="lede">Platform Owner creates the shared resources; every member does the config part. Approximately 10 minutes.</p>
+
+<div class="callout">
+  <span class="lbl">IRREVERSIBLE.</span>
+  A BigQuery dataset’s location <strong>cannot be changed after creation</strong>, and a dataset in one location cannot be
+  joined to a dataset in another. Everything here is <strong>US multi-region</strong>. The whole team must agree before this
+  step runs; fixing it later means deleting and reloading everything.
+</div>
+
+<h2>6.1 Shared resources (Platform Owner only)</h2>
+<pre>gcloud storage buckets create gs://&lt;PROJECT_ID&gt;-olist-raw \
+  --location=US --uniform-bucket-level-access</pre>
+<pre>for ds in olist_raw olist_staging olist_marts olist_snapshots; do
+  bq --location=US mk --dataset "&lt;PROJECT_ID&gt;:$ds"
+done</pre>
+<p class="note">Four datasets rather than one, so a defect stays reproducible in raw without contaminating what
+analysts read, and so the Analytics Owner can be given read-only access to marts alone.</p>
+
+<h2>6.2 Personal dev dataset (every member)</h2>
+<p>Everyone develops into their own dataset, so nobody can overwrite anyone else’s tables. Only a passing
+build promotes anything to the shared marts.</p>
+<pre>bq --location=US mk --dataset "&lt;PROJECT_ID&gt;:dbt_&lt;yourname&gt;"</pre>
+
+<h2>6.3 Config files (every member)</h2>
+<pre>cp .env.example .env</pre>
+<p class="note">Edit <code class="t">.env</code> and fill in at least these three values:</p>
+<pre>GCP_PROJECT_ID=&lt;your Project ID&gt;
+GCS_RAW_BUCKET=&lt;PROJECT_ID&gt;-olist-raw
+DBT_DEV_DATASET=dbt_&lt;yourname&gt;</pre>
+<pre>mkdir -p ~/.dbt
+cp dbt_project/profiles.yml.example ~/.dbt/profiles.yml</pre>
+<p class="note">Both <code class="t">.env</code> and <code class="t">~/.dbt/profiles.yml</code> are git-ignored. <code class="t">.env.example</code> holds variable names only
+and is the file that is committed.</p>
+
+<p class="verify">Verify the region, before any data is loaded:</p>
+<pre>bq show --format=prettyjson &lt;PROJECT_ID&gt;:olist_raw \
+  | grep location</pre>
+<p class="note">Must print <code class="t">"location": "US"</code>. If it prints anything else, delete the dataset and recreate it
+<strong>now</strong>, while it is still empty.</p>
+
+<p class="verify">Verify the dbt connection:</p>
+<pre>make debug</pre>
+<p class="note">All connection checks must pass against your personal <code class="t">dbt_&lt;yourname&gt;</code> dataset. Use <code class="t">make debug</code>, <strong>not</strong> a bare <code class="t">dbt debug</code>: the Makefile is the only thing that loads and exports <code class="t">.env</code>, so a direct dbt command fails with <em>"Env var required but not provided"</em>.</p>
+
+<!-- ============================ 7 ============================ -->
+<h1 id="s7">7. Step 6 — Run the Pipeline</h1>
+<p class="lede">Anyone, any time. First run takes roughly 5 to 10 minutes, most of it uploading and loading.</p>
+
+<pre>make all</pre>
+<p>The stages run in order and the chain stops at the first failure:</p>
+
+<table class="flow">
+  <tbody>
+    <tr>
+      <td>manifest</td>
+      <td><strong>Checksum the source files.</strong> sha256, byte size and the <em>true</em> CSV record count of all nine
+      files. Review text contains embedded newlines, so a line count would be wrong; the loader parses the CSV
+      properly.</td>
+    </tr>
+    <tr class="gate">
+      <td>GATE 1</td>
+      <td><strong>Great Expectations, on the files, before the load.</strong> Expected files present, column set and order,
+      row count against the manifest, non-null keys, money ranges, categorical domains. If this fails,
+      <strong>nothing is loaded</strong>.</td>
+    </tr>
+    <tr>
+      <td>ingest</td>
+      <td><strong>Upload and load.</strong> Uploads to the GCS landing prefix, loads into <code class="t">olist_raw</code> with explicit
+      schemas and no autodetect, then prints a source-versus-BigQuery row-count reconciliation table.</td>
+    </tr>
+    <tr class="gate">
+      <td>GATE 2</td>
+      <td><strong>dbt build.</strong> 24 models, 1 snapshot and 161 tests, interleaved in dependency order so a failing test
+      stops its own downstream models. If this fails, <strong>the marts do not publish</strong>.</td>
+    </tr>
+    <tr class="serve">
+      <td>unit</td>
+      <td><strong>pytest.</strong> 19 tests over the ingestion helpers. Needs no cloud credentials.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>7.1 Prove idempotency — this is a graded deliverable</h2>
+<p>Running the pipeline twice must produce identical row counts. The loader uses <code class="t">WRITE_TRUNCATE</code> per batch,
+so a rerun replaces rather than appends. Demonstrating it is evidence, not decoration.</p>
+<pre>make ingest</pre>
+<pre>bq query --use_legacy_sql=false \
+  "SELECT COUNT(*) FROM \`&lt;PROJECT_ID&gt;.olist_raw.orders\`"</pre>
+<p class="note">Must still return <code class="t">99441</code> after the second run. Commit the reconciliation log to
+<code class="t">docs/evidence/</code>.</p>
+
+<h2>7.2 Every make target</h2>
+<table>
+  <thead><tr><th style="width:22%">Command</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code class="t">make help</code></td><td>List every target with its description.</td></tr>
+    <tr><td><code class="t">make setup</code></td><td>Install requirements.txt and the dbt packages. Once per machine.</td></tr>
+    <tr><td><code class="t">make manifest</code></td><td>Checksum and row-count the local CSVs. Makes no cloud calls at all.</td></tr>
+    <tr><td><code class="t">make gate</code></td><td>Quality Gate 1 on its own: validate the files without loading them.</td></tr>
+    <tr><td><code class="t">make ingest</code></td><td>Upload to GCS, load into BigQuery, reconcile row counts.</td></tr>
+    <tr><td><code class="t">make build</code></td><td>Quality Gate 2 on its own: dbt build (models, snapshot and tests).</td></tr>
+    <tr><td><code class="t">make test</code></td><td>Run the dbt tests only, against whatever is already built.</td></tr>
+    <tr><td><code class="t">make unit</code></td><td>Run the pytest suite. Needs no credentials.</td></tr>
+    <tr><td><code class="t">make lint</code></td><td>sqlfluff over all dbt SQL.</td></tr>
+    <tr><td><code class="t">make all</code></td><td><strong>The whole pipeline:</strong> gate, ingest, build, unit.</td></tr>
+    <tr><td><code class="t">make analyse</code></td><td>Execute all three notebooks top to bottom.</td></tr>
+    <tr><td><code class="t">make dashboard</code></td><td><strong>Serve the interactive dashboard.</strong></td></tr>
+    <tr><td><code class="t">make docs</code></td><td>Generate and serve the dbt lineage graph.</td></tr>
+    <tr><td><code class="t">make evidence</code></td><td>Collect test artifacts into docs/evidence/ for the report.</td></tr>
+    <tr><td><code class="t">make clean</code></td><td>Remove dbt build artifacts.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================ 8 ============================ -->
+<h1 id="s8">8. Step 7 — Open the Dashboard</h1>
+<pre>make dashboard</pre>
+<p>A browser opens at <code class="t">http://localhost:8501</code>. If it does not open by itself, visit that address manually.
+Press <code class="t">Ctrl+C</code> in the terminal to stop the server.</p>
+<p>The sidebar filters every view by <strong>purchase-month range</strong>, <strong>destination region</strong>, and a
+<strong>minimum order volume</strong> below which a rate is treated as noise rather than a finding.</p>
+
+<h2>8.1 The five tabs</h2>
+<table>
+  <thead><tr><th style="width:17%">Tab</th><th style="width:28%">Answers</th><th>What to look at</th></tr></thead>
+  <tbody>
+    <tr><td class="k">Where</td><td>Which destinations and routes are late?</td>
+      <td>Late rate by destination state against the national average; an origin-to-destination region heat
+      map; the routes carrying the most late orders, with the revenue behind each.</td></tr>
+    <tr><td class="k">When</td><td>Which months, and is it improving?</td>
+      <td>Order volume against late rate by purchase month; a first-half versus second-half comparison stated
+      in percentage points; and the decomposition showing whether days are lost in payment approval, seller
+      handover or carrier transit.</td></tr>
+    <tr><td class="k">What it costs</td><td>What does lateness cost us?</td>
+      <td>Review score against how early or late the order arrived; the same penalty recomputed <em>within</em> each
+      state as a control; revenue exposed to late delivery; and whether the promised date itself is padded or
+      optimistic.</td></tr>
+    <tr><td class="k">Business KPIs</td><td>The three metrics the brief requires</td>
+      <td>Monthly sales with the late rate overlaid; a revenue-versus-late-rate scatter that surfaces
+      categories which sell well but ship badly; RFM segments with their delivery experience attached.</td></tr>
+    <tr><td class="k">Data quality</td><td>Can these numbers be trusted?</td>
+      <td>Runs the revenue reconciliation, the order-grain check, the person-grain RFM check and an
+      app-versus-model agreement check <strong>live</strong> against the warehouse.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout info">
+  <span class="lbl">DEMONSTRATE THE DATA QUALITY TAB DURING THE PRESENTATION.</span>
+  It re-runs the reconciliations against the live warehouse in front of the audience. A dashboard that can
+  prove its own numbers are not inflated by a join is far more persuasive than one that simply asserts it.
+</div>
+
+<h2>8.2 Why the dashboard cannot drift from the pipeline</h2>
+<ul>
+  <li><strong>It reads the marts layer only.</strong> No CSV, no raw tables, no local files. Every number comes from a dbt
+  model that has tests attached.</li>
+  <li><strong>It does not redefine metrics.</strong> Definitions live in <code class="t">docs/metric_dictionary.md</code> and are
+  implemented in dbt.</li>
+  <li>Interactive filtering <em>does</em> force the late rate to be recomputed against <code class="t">fct_orders</code>, because a
+  pre-aggregated model cannot be sliced by an arbitrary filter combination. That SQL is confined to a single
+  constant in the app, and the Data quality tab asserts live that it still agrees with
+  <code class="t">agg_delivery_monthly</code>.</li>
+  <li>The shared connection module sits at the repository root and is imported by <em>both</em> the notebooks and the
+  dashboard, so the two cannot end up reading different datasets while both appear correct.</li>
+</ul>
+
+<!-- ============================ 9 ============================ -->
+<h1 id="s9">9. Optional Outputs</h1>
+
+<h2>9.1 Execute the notebooks</h2>
+<pre>make analyse</pre>
+<p class="note">Runs all three notebooks headless and writes the outputs back in place. This is exactly how a
+reviewer verifies reproducibility, so run it before submitting.</p>
+
+<h2>9.2 dbt documentation and lineage graph</h2>
+<pre>make docs</pre>
+<p class="note">Generates the model documentation and serves the full lineage graph in a browser. Useful as a
+slide during the technical part of the presentation.</p>
+
+<h2>9.3 Dagster orchestration UI</h2>
+<pre>mkdir -p orchestration/.dagster_home
+export DAGSTER_HOME=$PWD/orchestration/.dagster_home
+dagster dev -f orchestration/definitions.py</pre>
+<p class="note">Dagster requires <code class="t">DAGSTER_HOME</code> to point at a directory that already
+exists; it does not create one for you, and fails with <code class="t">is not a directory or does not
+exist</code> if the <code class="t">mkdir</code> step above is skipped.</p>
+<p class="note">Opens at <code class="t">http://localhost:3000</code>. This is where you demonstrate that a failing upstream quality
+gate <strong>skips</strong> the downstream assets, which is the difference between orchestration and a cron job that runs
+everything regardless.</p>
+
+<!-- ============================ 10 ============================ -->
+<h1 id="s10">10. Troubleshooting</h1>
+<table>
+  <thead><tr><th style="width:34%">Symptom</th><th>Cause and fix</th></tr></thead>
+  <tbody>
+    <tr><td><code class="t">Env var required but not provided: GCP_PROJECT_ID</code></td>
+      <td><code class="t">.env</code> does not exist, or <code class="t">GCP_PROJECT_ID</code> is not filled in. The Makefile only includes
+      <code class="t">.env</code> when the file is present. Copy <code class="t">.env.example</code> to <code class="t">.env</code> and complete it.</td></tr>
+    <tr><td><code class="t">could not automatically determine credentials</code></td>
+      <td><code class="t">gcloud auth application-default login</code> was skipped. It is a separate credential from
+      <code class="t">gcloud auth login</code>, and both are required.</td></tr>
+    <tr><td><code class="t">Dataset olist_raw is in EU, but this project is pinned to US</code></td>
+      <td>The dataset was created in the wrong location. The loader asserts this and fails fast on purpose.
+      Delete the dataset and recreate it with <code class="t">--location=US</code> before loading anything.</td></tr>
+    <tr><td><code class="t">Missing source file: data/raw/olist_orders_dataset.csv</code></td>
+      <td>The Kaggle archive was not unzipped into <code class="t">data/raw/</code>. See Step 4.</td></tr>
+    <tr><td>Quality Gate 1 reports FAIL and nothing loads</td>
+      <td>This is the gate working as designed. The log names the file, the column and the number of offending
+      records. Fix the source data and rerun. <strong>Do not bypass it.</strong></td></tr>
+    <tr><td>A dbt test fails and the marts do not build</td>
+      <td>Also by design. Read the failing test name: the reconciliation tests in particular mean a join has
+      fanned out and a revenue figure would have been wrong. Fix the model, do not lower the test.</td></tr>
+    <tr><td>dbt will not install, or reports a syntax error on startup</td>
+      <td>The wrong Python is active. Run <code class="t">python --version</code>; it must be 3.11. Run
+      <code class="t">conda activate bd-m2-g7</code>.</td></tr>
+    <tr><td>The dashboard shows “Not configured yet”</td>
+      <td>The app could not import the shared connection module because <code class="t">.env</code> is missing or incomplete. It
+      is showing setup instructions rather than a stack trace.</td></tr>
+    <tr><td>The dashboard shows “Could not reach the marts layer”</td>
+      <td>Credentials are fine but the marts do not exist yet. Run <code class="t">make all</code> first.</td></tr>
+    <tr><td>Port 8501 is already in use</td>
+      <td>A dashboard is already running. Stop it with <code class="t">Ctrl+C</code> in its terminal, or run
+      <code class="t">streamlit run dashboard/app.py --server.port 8502</code>.</td></tr>
+    <tr><td><code class="t">$DAGSTER_HOME "..." is not a directory or does not exist</code></td>
+      <td>Dagster requires the directory to already exist; it will not create one for you.
+      Run <code class="t">mkdir -p orchestration/.dagster_home</code> before the <code class="t">export</code>.</td></tr>
+    <tr><td>Dagster: <code class="t">profiles_dir ... does not contain a profiles.yml file</code>, thrown from
+      inside <code class="t">dagster_dbt/dbt_project.py</code></td>
+      <td>A <code class="t">dagster_dbt</code> internal step (<code class="t">DbtProject.prepare_if_dev()</code>)
+      builds its own <code class="t">DbtCliResource</code> at import time and, unlike the <code class="t">dbt</code>
+      CLI itself, does <strong>not</strong> fall back to <code class="t">DBT_PROFILES_DIR</code> or
+      <code class="t">~/.dbt</code>. <code class="t">orchestration/definitions.py</code> already passes
+      <code class="t">profiles_dir</code> directly to the <code class="t">DbtProject(...)</code> constructor for
+      this reason. If you see this error, something has reverted that argument — check it is still there
+      before anything else.</td></tr>
+    <tr><td>Restarting <code class="t">dagster dev</code> keeps showing the pre-fix error, or restarting seems to
+      do nothing</td>
+      <td><code class="t">dagster dev</code> spawns separate <code class="t">dagster_webserver</code>,
+      <code class="t">code-server</code>, <code class="t">api grpc</code> and <code class="t">_daemon</code>
+      child processes with their own command lines. Killing only the parent
+      (<code class="t">pkill -f "dagster dev"</code>) orphans the children, which keep the old, broken code
+      location bound to port 3000. Stop everything with <code class="t">pkill -9 -f dagster</code> and confirm
+      the port is free (<code class="t">lsof -ti :3000</code> returns nothing) before starting again.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================ 11 ============================ -->
+<h1 id="s11">11. What Has and Has Not Been Verified</h1>
+<p>Stated plainly so nobody is surprised on the first run.</p>
+
+<h2>11.1 Verified</h2>
+<table>
+  <thead><tr><th style="width:34%">Check</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>dbt parse, clean project</td><td>Passes. 24 models, 161 tests, 1 snapshot resolve correctly.</td></tr>
+    <tr><td>sqlfluff, BigQuery dialect</td><td>Zero findings across all models and tests.</td></tr>
+    <tr><td>pytest</td><td>19 tests pass.</td></tr>
+    <tr><td>Dagster definitions load</td><td>28 assets, 1 job, 1 daily schedule.</td></tr>
+    <tr><td>Great Expectations gate</td><td>Correctly blocks and names the offending column and row count when
+      faults are injected into a fixture.</td></tr>
+    <tr><td>Streamlit dashboard</td><td>All five tabs render correctly against a synthetic dataset, including
+      every chart, table and the live reconciliation panel.</td></tr>
+    <tr><td>Secret and data leak guard</td><td>No <code class="t">.env</code>, no credential JSON and nothing under
+      <code class="t">data/</code> would be tracked by git.</td></tr>
+  </tbody>
+</table>
+
+<h2>11.2 Not yet verified</h2>
+<div class="callout">
+  <span class="lbl">THE SQL HAS NEVER RUN AGAINST A REAL BIGQUERY WAREHOUSE.</span>
+  At the time of writing there is no GCP project and no credentials, so every check above is <em>static</em>: the SQL
+  was parsed by dbt and by sqlfluff against the BigQuery dialect, and the dashboard was exercised against
+  synthetic data. Semantic correctness on the real dataset can only be confirmed once Step 6 has been run.
+  <strong>If <code class="t">dbt build</code> reports an error on the first run, capture the full output before changing anything.</strong>
+</div>
+
+<h2>11.3 Acceptance checklist for the first successful run</h2>
+<ul class="check">
+  <li><code class="t">make all</code> completes with no failures.</li>
+  <li>The reconciliation table printed by <code class="t">make ingest</code> shows zero differences on all nine tables.</li>
+  <li>Running <code class="t">make ingest</code> a second time produces identical row counts.</li>
+  <li><code class="t">dbt build</code> reports 0 failures across 161 tests.</li>
+  <li>All three notebooks execute end to end with <code class="t">make analyse</code>.</li>
+  <li><code class="t">make dashboard</code> opens and the Data quality tab shows all four checks passing.</li>
+  <li><code class="t">git status</code> shows no <code class="t">.env</code>, no credential file and nothing under <code class="t">data/</code>.</li>
+</ul>
+
+</body>
+</html>

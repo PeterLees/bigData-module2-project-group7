@@ -1,0 +1,49 @@
+{
+  "expectations": [
+    {
+      "id": "7272bfae-8cad-466b-b659-6ab528e8b6ba",
+      "kwargs": {
+        "column_set": [
+          "product_category_name",
+          "product_category_name_english"
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_table_columns_to_match_set"
+    },
+    {
+      "id": "672853d3-f4d7-426f-b823-fa5b9adedb59",
+      "kwargs": {
+        "value": 71
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_table_row_count_to_equal"
+    },
+    {
+      "id": "50e0bbe3-2697-41b0-92db-4719fe3434b8",
+      "kwargs": {
+        "column": "product_category_name"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "6663ed2f-8179-4281-84b5-d8dc84ccbee2",
+      "kwargs": {
+        "column": "product_category_name_english"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    }
+  ],
+  "id": "f355b5dc-cd57-4498-a860-bef6afd7b409",
+  "meta": {
+    "great_expectations_version": "1.22.0"
+  },
+  "name": "olist_raw__product_category_translation",
+  "notes": null
+}

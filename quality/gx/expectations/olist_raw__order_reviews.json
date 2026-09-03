@@ -1,0 +1,74 @@
+{
+  "expectations": [
+    {
+      "id": "1d3ac192-5171-4a8c-9dbd-8076e4aa60f2",
+      "kwargs": {
+        "column_set": [
+          "review_id",
+          "order_id",
+          "review_score",
+          "review_comment_title",
+          "review_comment_message",
+          "review_creation_date",
+          "review_answer_timestamp"
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_table_columns_to_match_set"
+    },
+    {
+      "id": "c206f994-dc74-437f-a2fe-8350b6488cf1",
+      "kwargs": {
+        "value": 99224
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_table_row_count_to_equal"
+    },
+    {
+      "id": "1ffc2bdf-fc23-439e-bcf3-f52e68073c40",
+      "kwargs": {
+        "column": "review_id"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "1c3e30bc-dfdc-4886-bbbb-a3d7c726907e",
+      "kwargs": {
+        "column": "order_id"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "3545d9d5-e4c1-4d2d-b5db-48a47b148618",
+      "kwargs": {
+        "column": "review_score"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "4f006ab3-e253-4475-9a2e-c930e72f3055",
+      "kwargs": {
+        "column": "review_score",
+        "max_value": 5.0,
+        "min_value": 1.0
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    }
+  ],
+  "id": "0c3088c7-4e6a-4c48-be95-340fccee9b09",
+  "meta": {
+    "great_expectations_version": "1.22.0"
+  },
+  "name": "olist_raw__order_reviews",
+  "notes": null
+}

@@ -1,0 +1,47 @@
+# ---- data (never commit raw datasets) ----
+data/
+*.csv
+*.zip
+!dbt_project/seeds/*.csv
+
+# ---- credentials & secrets ----
+.env
+*.env
+!.env.example
+*-key.json
+*credentials*.json
+service-account*.json
+.kaggle/
+gcloud-key*
+
+# ---- dbt ----
+dbt_project/target/
+dbt_project/dbt_packages/
+dbt_project/logs/
+dbt_project/profiles.yml
+.user.yml
+
+# ---- great expectations ----
+quality/gx/uncommitted/
+
+# ---- dagster ----
+orchestration/.dagster_home/
+tmp*/
+*.dagster*
+
+# ---- python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+
+# ---- os / editor ----
+.DS_Store
+.vscode/
+.idea/
+
+# dbt parse sandbox
+dbt_project/.parsecheck/

@@ -1,0 +1,22 @@
+{
+  "data": {
+    "asset": {
+      "id": "fa0afa32-4e10-4364-8b50-4b377a6e5418",
+      "name": "geolocation"
+    },
+    "batch_definition": {
+      "id": "1c1b7f58-0970-48ca-9f63-b78c7290a667",
+      "name": "batch__geolocation"
+    },
+    "datasource": {
+      "id": "c398083a-2d32-4209-98f2-6fffd948812e",
+      "name": "olist_files__geolocation"
+    }
+  },
+  "id": "c2d7fee7-59f8-465c-b887-be5ad474ea4d",
+  "name": "vd__geolocation",
+  "suite": {
+    "id": "109b5997-4e10-40cc-87e3-10599dccc117",
+    "name": "olist_raw__geolocation"
+  }
+}

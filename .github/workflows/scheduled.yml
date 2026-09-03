@@ -1,0 +1,107 @@
+name: Scheduled dbt build
+
+# The automated data-update and quality-check schedule required by item 6 of
+# the brief.
+#
+# Unlike ci.yml this job DOES touch BigQuery, so it authenticates with the
+# least-privilege service account created in Step G of the development plan.
+# That account can run query jobs and write to olist_staging and olist_marts,
+# and nothing else -- in particular it cannot touch olist_raw, so a bug here
+# can never destroy the reproducible copy of the source data.
+#
+# It runs `dbt build`, which interleaves models and tests in dependency order.
+# A failing test therefore stops its own downstream models from being rebuilt,
+# rather than being discovered after bad data has already been published.
+
+on:
+  schedule:
+    # 02:30 UTC daily, half an hour after the local Dagster schedule so the two
+    # never contend for the same tables.
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+    inputs:
+      full_refresh:
+        description: "Rebuild every model from scratch"
+        type: boolean
+        default: false
+
+concurrency:
+  group: scheduled-dbt-build
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.11"
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_LOCATION: US
+  BQ_DATASET_RAW: olist_raw
+  DBT_TARGET: ci
+
+jobs:
+  build:
+    name: dbt build against the shared marts
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Materialise the service-account key
+        # The key exists only for the life of this step's runner. It is never
+        # written into the repository and never printed.
+        run: |
+          echo '${{ secrets.GCP_SA_KEY }}' > /tmp/gcp-sa-key.json
+          chmod 600 /tmp/gcp-sa-key.json
+
+      - name: Write the dbt profile
+        run: |
+          mkdir -p ~/.dbt
+          cp dbt_project/profiles.yml.example ~/.dbt/profiles.yml
+        env:
+          GCP_SA_KEYFILE: /tmp/gcp-sa-key.json
+
+      - name: Install dbt packages
+        working-directory: dbt_project
+        run: dbt deps
+
+      - name: dbt build (models, snapshots and tests, dependency ordered)
+        # `dbt build` runs snapshots as part of the DAG, so they are captured in
+        # the right order automatically. Running `dbt snapshot` first would fail
+        # on a fresh dataset, because the snapshot reads stg_products.
+        working-directory: dbt_project
+        run: |
+          dbt build --target ci ${{ inputs.full_refresh && '--full-refresh' || '' }}
+        env:
+          GCP_SA_KEYFILE: /tmp/gcp-sa-key.json
+
+      - name: Generate documentation and lineage
+        if: always()
+        working-directory: dbt_project
+        run: dbt docs generate --target ci
+        env:
+          GCP_SA_KEYFILE: /tmp/gcp-sa-key.json
+
+      - name: Upload run results as evidence
+        # Uploaded even on failure: a failing run's artifacts are exactly the
+        # evidence the report needs.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-run-results-${{ github.run_number }}
+          path: |
+            dbt_project/target/run_results.json
+            dbt_project/target/manifest.json
+            dbt_project/target/catalog.json
+          retention-days: 30
+
+      - name: Revoke the local key material
+        if: always()
+        run: rm -f /tmp/gcp-sa-key.json

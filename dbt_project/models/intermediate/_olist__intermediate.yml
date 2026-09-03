@@ -1,0 +1,168 @@
+version: 2
+
+models:
+  - name: int_order_payments
+    description: >
+      FAN-OUT CONTROL. Payments collapsed to one row per order. Joining raw
+      payments to order items produces N items x M payments rows and inflates
+      revenue by a plausible-looking factor. The uniqueness test below is what
+      guarantees that can no longer happen downstream.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: order_payment_total
+        description: Sum of all payment records for the order, including vouchers and installments.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: primary_payment_type
+        description: The payment method carrying the largest value on the order.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [credit_card, boleto, voucher, debit_card, not_defined]
+
+  - name: int_order_reviews
+    description: >
+      FAN-OUT CONTROL. Reviews collapsed to one row per order, keeping the most
+      recent review by creation date with review_id as a deterministic
+      tie-break. The source contains repeated review_ids and multi-review
+      orders; joining it raw would duplicate orders and therefore duplicate
+      both revenue and delivery measures.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: review_score
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+      - name: source_review_count
+        description: How many reviews the order actually had. Kept for transparency about how much deduplication occurred.
+
+  - name: int_order_items_rollup
+    description: >
+      FAN-OUT CONTROL. Item lines rolled up to one row per order, carrying money
+      measures and the primary seller. The primary seller is the one
+      contributing the most revenue to the order; this keeps a delivery route
+      1:1 with an order so route-level counts and sums reconcile to the totals.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: order_revenue
+        description: Sum of item price. Freight is a separate measure and is never included here.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: order_freight
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: order_item_count
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                inclusive: true
+      - name: primary_seller_key
+        description: Seller contributing the most revenue to the order. Used for route attribution.
+        data_tests: [not_null]
+      - name: is_multi_seller_order
+        description: >
+          True where the order spans more than one seller. Carried through so
+          any analysis can exclude these if the primary-seller attribution is
+          not acceptable for its purpose.
+
+  - name: int_order_delivery
+    description: >
+      The model the whole project is about. Converts five milestone timestamps
+      into the delivery measures that answer where, when and at what cost
+      deliveries are late. Lateness is measured in whole days against the
+      promised DATE, because the promise made to the customer is a date. Orders
+      that never arrived carry NULL, not false, so they cannot be silently
+      counted as on-time.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: total_delivery_days
+        description: Purchase to customer delivery, in fractional days. Null until delivered.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 240
+                inclusive: true
+      - name: approval_days
+        description: Purchase to payment approval. Usually well under a day, which is why this is fractional rather than DATE_DIFF.
+        data_tests:
+          - dbt_utils.accepted_range:
+              # Observed 0.0 to 187.9 days on the first real run. The floor of 0
+              # is a genuine constraint: approval cannot precede purchase, and
+              # the data confirms zero violations. The ceiling catches a parsing
+              # or timezone error, not a slow payment.
+              arguments:
+                min_value: 0
+                max_value: 365
+                inclusive: true
+      - name: seller_handover_days
+        description: Approval to carrier handover. The seller's own fulfilment time.
+        data_tests:
+          - dbt_utils.accepted_range:
+              # Observed -171.2 to 125.8 days. Negative values are the
+              # asynchronous-recording artefact described in
+              # assert_milestone_recording_order (1.37% of orders, median -21h);
+              # they are monitored there rather than blocked here. These bounds
+              # exist to catch corruption, which would be orders of magnitude out.
+              arguments:
+                min_value: -200
+                max_value: 365
+                inclusive: true
+      - name: carrier_transit_days
+        description: Carrier handover to customer delivery. The carrier's own time.
+        data_tests:
+          - dbt_utils.accepted_range:
+              # Observed -16.1 to 205.2 days. Same recording artefact as above.
+              arguments:
+                min_value: -30
+                max_value: 365
+                inclusive: true
+      - name: delay_vs_promise_days
+        description: >
+          Whole-day difference between the delivery date and the promised date.
+          Negative means early. Null when the order never arrived. This is the
+          measure the headline late rate is derived from.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -200
+                max_value: 200
+                inclusive: true
+      - name: is_late
+        description: delay_vs_promise_days greater than zero. NULL for undelivered orders, never false.
+      - name: lateness_bucket
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - "Not delivered"
+                  - "1. Very early (8+ days)"
+                  - "2. Early (1-7 days)"
+                  - "3. On the promised day"
+                  - "4. Late (1-3 days)"
+                  - "5. Late (4-7 days)"
+                  - "6. Late (8-15 days)"
+                  - "7. Late (16+ days)"
+      - name: promise_slack_days
+        description: >
+          Promised days minus actual days. Positive means the promise was
+          padded. Kept separate from delay so that a systematically wrong
+          estimate, which is cheap to fix, is not confused with slow logistics,
+          which is expensive to fix.

@@ -1,0 +1,41 @@
+# Python 3.11 required (dbt does not support 3.14).
+#   conda create -y -n bd-m2-g7 python=3.11 && conda activate bd-m2-g7
+#   pip install -r requirements.txt
+
+# --- warehouse + transformation -------------------------------------------
+dbt-core==1.11.11
+dbt-bigquery==1.10.3
+google-cloud-bigquery==3.43.0
+google-cloud-storage==3.1.1
+
+# --- dashboard -------------------------------------------------------------
+# altair ships as a streamlit dependency, so the charts need nothing extra.
+streamlit==1.62.0
+
+# --- analysis --------------------------------------------------------------
+sqlalchemy==2.0.51
+sqlalchemy-bigquery==1.15.0
+db-dtypes==1.5.0
+pandas==2.3.3
+pyarrow==22.0.0
+matplotlib==3.10.7
+jupyterlab==4.4.10
+
+# --- data quality ----------------------------------------------------------
+# Must be >= 1.9. Great Expectations 1.8.0 pins altair<5, which is mutually
+# exclusive with the altair>=5 that modern Streamlit requires. Do not pin this
+# back down without also downgrading Streamlit.
+great-expectations==1.22.0
+
+# --- orchestration ---------------------------------------------------------
+# dagster-dbt 0.28.x caps dbt-core below 1.11, which conflicts with the
+# dbt-core pinned above. 0.29.x supports it.
+dagster==1.13.20
+dagster-dbt==0.29.20
+dagster-webserver==1.13.20
+
+# --- ingestion + tooling ---------------------------------------------------
+requests==2.32.5
+python-dotenv==1.1.1
+pytest==8.4.2
+sqlfluff==3.4.2

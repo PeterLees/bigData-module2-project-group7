@@ -1,0 +1,85 @@
+{
+  "expectations": [
+    {
+      "id": "35785db3-5f5d-493b-abea-4870e98ea372",
+      "kwargs": {
+        "column_set": [
+          "geolocation_zip_code_prefix",
+          "geolocation_lat",
+          "geolocation_lng",
+          "geolocation_city",
+          "geolocation_state"
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_table_columns_to_match_set"
+    },
+    {
+      "id": "4fc0cfb3-0e49-447b-a902-dc78846bcc85",
+      "kwargs": {
+        "value": 1000163
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_table_row_count_to_equal"
+    },
+    {
+      "id": "5a0ec78b-7af2-4f21-abfa-a984bdedcc23",
+      "kwargs": {
+        "column": "geolocation_zip_code_prefix"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "fd7faf3d-adb5-417d-aaa9-f946fd2ff45b",
+      "kwargs": {
+        "column": "geolocation_lat"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "d45bbb6b-d900-44b1-a6fc-087385eeec4e",
+      "kwargs": {
+        "column": "geolocation_lng"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "a2340f28-c73a-44a6-b280-bac2f356dff4",
+      "kwargs": {
+        "column": "geolocation_lat",
+        "max_value": 6.0,
+        "min_value": -35.0,
+        "mostly": 0.999
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    },
+    {
+      "id": "61301b73-ff06-4123-acb4-00d7bc423312",
+      "kwargs": {
+        "column": "geolocation_lng",
+        "max_value": -32.0,
+        "min_value": -75.0,
+        "mostly": 0.999
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    }
+  ],
+  "id": "109b5997-4e10-40cc-87e3-10599dccc117",
+  "meta": {
+    "great_expectations_version": "1.22.0"
+  },
+  "name": "olist_raw__geolocation",
+  "notes": null
+}

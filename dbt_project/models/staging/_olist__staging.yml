@@ -1,0 +1,173 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: >
+      One row per order, renamed and typed. Deliberately not deduplicated: if
+      duplicate order_ids ever appear we want the unique test below to fail
+      loudly rather than have a qualify clause hide an ingestion problem.
+    columns:
+      - name: order_id
+        description: Natural key. One row per order.
+        data_tests: [unique, not_null]
+      - name: customer_id
+        description: Per-order identifier. Must be resolved to customer_key before customer analysis.
+        data_tests: [not_null]
+      - name: order_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [delivered, shipped, canceled, unavailable, invoiced, processing, created, approved]
+      - name: order_purchased_at
+        description: Event time for all trend analysis.
+        data_tests: [not_null]
+      - name: order_purchase_date
+        description: Date grain of the purchase. The partition key on both fact tables.
+        data_tests: [not_null]
+      - name: is_delivered
+        description: True when order_status is 'delivered'. The only orders with a meaningful lateness value.
+      - name: is_excluded_from_kpis
+        description: True for the statuses in the excluded_order_statuses project var (canceled, unavailable).
+
+  - name: stg_order_items
+    description: One row per item line within an order. The revenue backbone.
+    columns:
+      - name: order_item_key
+        description: Composite key, order_id plus order_item_id. order_id alone is not unique at this grain.
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests: [not_null]
+      - name: product_key
+        data_tests: [not_null]
+      - name: seller_key
+        data_tests: [not_null]
+      - name: item_price
+        description: Merchandise value of the line, NUMERIC for exact money arithmetic.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: freight_value
+        description: Shipping cost of the line. Never folded into revenue.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+
+  - name: stg_order_payments
+    description: >
+      One row per payment record, left at payment grain on purpose. Aggregation
+      to order grain happens exactly once, in int_order_payments.
+    columns:
+      - name: payment_key
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests: [not_null]
+      - name: payment_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [credit_card, boleto, voucher, debit_card, not_defined]
+      - name: payment_value
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+
+  - name: stg_order_reviews
+    description: >
+      Reviews at source grain, with exact duplicate rows removed. review_id is
+      NOT unique in the source and some orders carry several reviews, so no
+      uniqueness test is asserted here. That is resolved in int_order_reviews.
+    columns:
+      - name: order_id
+        data_tests: [not_null]
+      - name: review_score
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+
+  - name: stg_customers
+    description: The customer_id to customer_key bridge. One row per source customer_id.
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: customer_key
+        description: customer_unique_id. The stable identity of a person across orders. NOT unique here by design.
+        data_tests: [not_null]
+      - name: customer_state
+        description: Two-letter state code. The destination half of a delivery route.
+        data_tests: [not_null]
+      - name: customer_region
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [Norte, Nordeste, Centro-Oeste, Sudeste, Sul, Unknown]
+
+  - name: stg_sellers
+    description: One row per seller. seller_state is the origin half of a delivery route.
+    columns:
+      - name: seller_key
+        data_tests: [unique, not_null]
+      - name: seller_state
+        data_tests: [not_null]
+      - name: seller_region
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [Norte, Nordeste, Centro-Oeste, Sudeste, Sul, Unknown]
+
+  - name: stg_products
+    description: One row per product, with the English category name attached and source misspellings corrected.
+    columns:
+      - name: product_key
+        data_tests: [unique, not_null]
+      - name: product_category
+        description: English category name. 'unknown' where the source category is null or untranslated.
+        data_tests: [not_null]
+      - name: product_weight_g
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+
+  - name: stg_geolocation
+    description: >
+      Geolocation collapsed to ONE ROW PER ZIP-CODE PREFIX. This is a fan-out
+      control: the source has roughly a million rows with many per prefix, and
+      joining it raw to a dimension multiplies the row count unpredictably.
+    columns:
+      - name: zip_code_prefix
+        data_tests: [unique, not_null]
+      - name: latitude
+        description: >
+          Median latitude for the prefix. Median, not mean, so mis-geocoded
+          points cannot drag it. A handful of prefixes are nonetheless entirely
+          mis-geocoded in the source (see data issue 13), so the bounding-box
+          check is a warning here, matching the mostly=0.999 threshold Quality
+          Gate 1 applies to the same columns. Coordinates are a non-key
+          enrichment attribute; nothing in the delivery analysis depends on them.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -35
+                max_value: 6
+              config:
+                severity: warn
+      - name: longitude
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -75
+                max_value: -32
+              config:
+                severity: warn

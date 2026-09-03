@@ -1,0 +1,95 @@
+name: CI
+
+# Runs on every pull request and every push to main.
+#
+# Deliberately needs NO cloud credentials. Everything here is static analysis:
+# dbt parses the whole DAG, sqlfluff lints the SQL, and pytest exercises the
+# ingestion helpers against fixtures. That keeps the check fast, safe to run on
+# a fork, and impossible to break by a BigQuery outage.
+#
+# The credentialed run that actually builds models lives in scheduled.yml.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  # Placeholder values. dbt parse resolves env_var() calls but never connects,
+  # so these only need to exist, not to be real.
+  GCP_PROJECT_ID: ci-parse-only
+  GCP_LOCATION: US
+  BQ_DATASET_RAW: olist_raw
+  DBT_DEV_DATASET: dbt_ci
+
+jobs:
+  quality:
+    name: Lint, parse and unit test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Write a credential-free dbt profile
+        # dbt needs a profile to resolve the target, but `dbt parse` never opens
+        # a connection, so an oauth profile with no credentials is sufficient.
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml <<'PROFILE'
+          olist_analytics:
+            target: dev
+            outputs:
+              dev:
+                type: bigquery
+                method: oauth
+                project: ci-parse-only
+                dataset: dbt_ci
+                location: US
+                threads: 4
+          PROFILE
+
+      - name: Install dbt packages
+        working-directory: dbt_project
+        run: dbt deps
+
+      - name: Parse the dbt project
+        # Catches broken refs, missing sources, bad macros and malformed YAML
+        # before anyone can merge them.
+        working-directory: dbt_project
+        run: dbt parse --no-partial-parse
+
+      - name: Lint dbt SQL
+        working-directory: dbt_project
+        run: sqlfluff lint models tests
+
+      - name: Python unit tests
+        run: pytest tests -q
+
+      - name: Check no secrets were committed
+        # A cheap, explicit guard for the failure mode that would matter most.
+        run: |
+          set -e
+          if git ls-files | grep -E '(^|/)\.env$|service-account.*\.json$|-key\.json$'; then
+            echo "::error::A credential file is tracked by git. Remove it and rotate the key."
+            exit 1
+          fi
+          if git ls-files | grep -E '^data/'; then
+            echo "::error::Raw data is tracked by git. data/ must stay ignored."
+            exit 1
+          fi
+          echo "No credential or data files are tracked."

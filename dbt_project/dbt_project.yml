@@ -1,0 +1,56 @@
+name: olist_analytics
+version: "1.0.0"
+config-version: 2
+
+profile: olist_analytics
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+seed-paths: ["seeds"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+# ---------------------------------------------------------------------------
+# Project variables. These are the single source of truth for every analytical
+# cut-off in the project; nothing downstream may hard-code them.
+# ---------------------------------------------------------------------------
+vars:
+  # Olist is a static export. RFM recency and every "as of" calculation are
+  # measured against this date, never against CURRENT_DATE, so results are
+  # reproducible forever.
+  olist_snapshot_date: "2018-10-17"
+
+  # The window in which the export has usable coverage. Orders exist outside it
+  # but are too sparse to trend on, so charts annotate or trim the edges.
+  analysis_start_date: "2016-09-01"
+  analysis_end_date: "2018-10-31"
+
+  # Statuses excluded from revenue and delivery KPIs. Declared once here and
+  # referenced by every model and test so the caliber cannot drift.
+  excluded_order_statuses: ["canceled", "unavailable"]
+
+  # Suppress states/routes below this order volume in aggregate reporting: a
+  # 100% late rate on three orders is noise, not a finding.
+  min_orders_for_reporting: 30
+
+models:
+  olist_analytics:
+    +persist_docs:
+      relation: true
+      columns: true
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: view
+      +schema: staging
+    marts:
+      +materialized: table
+      +schema: marts
+
+snapshots:
+  olist_analytics:
+    +target_schema: snapshots

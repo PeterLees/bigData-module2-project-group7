@@ -1,0 +1,46 @@
+# Copy to ~/.dbt/profiles.yml (or set DBT_PROFILES_DIR to this directory).
+# profiles.yml itself is git-ignored: it contains your personal dataset name.
+#
+# Authentication is user OAuth. Run this once, before dbt:
+#     gcloud auth application-default login
+# Do NOT put a service-account key path here for local development.
+
+olist_analytics:
+  target: dev
+  outputs:
+
+    # Personal sandbox. Models land in dbt_<yourname>, dbt_<yourname>_staging
+    # and dbt_<yourname>_marts, so you cannot break anyone else's work.
+    dev:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: "{{ env_var('DBT_DEV_DATASET') }}"
+      location: "{{ env_var('GCP_LOCATION', 'US') }}"
+      threads: 4
+      timeout_seconds: 600
+      priority: interactive
+
+    # Shared datasets. Used by CI and by the Modeling Owner when promoting.
+    # Writes to olist_staging and olist_marts exactly, with no prefix.
+    prod:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: olist
+      location: "{{ env_var('GCP_LOCATION', 'US') }}"
+      threads: 8
+      timeout_seconds: 900
+      priority: interactive
+
+    # GitHub Actions. Authenticates with the least-privilege service account
+    # whose JSON is injected from the GCP_SA_KEY secret at runtime.
+    ci:
+      type: bigquery
+      method: service-account
+      keyfile: "{{ env_var('GCP_SA_KEYFILE', '/tmp/gcp-sa-key.json') }}"
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: olist
+      location: "{{ env_var('GCP_LOCATION', 'US') }}"
+      threads: 8
+      timeout_seconds: 900

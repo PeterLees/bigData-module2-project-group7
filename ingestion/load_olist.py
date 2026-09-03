@@ -1,0 +1,323 @@
+"""Load the Olist CSV export into BigQuery, idempotently and with evidence.
+
+Pipeline for each of the nine source files:
+
+    manifest (sha256, bytes, rows)
+        -> upload to GCS landing prefix
+        -> load into olist_raw._stg_<table> with an explicit schema
+        -> rewrite as olist_raw.<table> with _batch_id / _loaded_at / _source_uri
+        -> reconcile BigQuery row count against the manifest row count
+
+Every load uses WRITE_TRUNCATE, so running this twice produces exactly the same
+tables. That idempotency is a graded deliverable, not an implementation detail.
+
+Usage
+-----
+    python ingestion/load_olist.py                 # full run
+    python ingestion/load_olist.py --manifest-only # checksum + row count, no cloud
+    python ingestion/load_olist.py --skip-upload   # reuse objects already in GCS
+    python ingestion/load_olist.py --tables orders order_items
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import dataclasses
+import datetime as dt
+import hashlib
+import json
+import logging
+import os
+import sys
+import uuid
+from pathlib import Path
+
+from dotenv import load_dotenv
+from google.cloud import bigquery, storage
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
+MANIFEST_PATH = Path(__file__).resolve().parent / "manifest.json"
+
+# source file name -> raw BigQuery table name
+SOURCE_FILES: dict[str, str] = {
+    "olist_orders_dataset.csv": "orders",
+    "olist_order_items_dataset.csv": "order_items",
+    "olist_order_payments_dataset.csv": "order_payments",
+    "olist_order_reviews_dataset.csv": "order_reviews",
+    "olist_customers_dataset.csv": "customers",
+    "olist_products_dataset.csv": "products",
+    "olist_sellers_dataset.csv": "sellers",
+    "olist_geolocation_dataset.csv": "geolocation",
+    "product_category_name_translation.csv": "product_category_translation",
+}
+
+# Published row counts for the Kaggle export. A mismatch means a different or
+# truncated download, which we want to know about before modelling anything.
+EXPECTED_ROWS: dict[str, int] = {
+    "orders": 99_441,
+    "order_items": 112_650,
+    "order_payments": 103_886,
+    "order_reviews": 99_224,
+    "customers": 99_441,
+    "products": 32_951,
+    "sellers": 3_095,
+    "geolocation": 1_000_163,
+    "product_category_translation": 71,
+}
+
+log = logging.getLogger("load_olist")
+
+
+# --------------------------------------------------------------------------- #
+# configuration
+# --------------------------------------------------------------------------- #
+@dataclasses.dataclass(frozen=True)
+class Config:
+    project_id: str
+    location: str
+    bucket: str
+    prefix: str
+    dataset_raw: str
+    local_raw_dir: Path
+    snapshot_date: str
+    source_url: str
+    licence: str
+
+    @classmethod
+    def from_env(cls) -> "Config":
+        load_dotenv(REPO_ROOT / ".env")
+        missing = [k for k in ("GCP_PROJECT_ID", "GCS_RAW_BUCKET") if not os.getenv(k)]
+        if missing:
+            raise SystemExit(
+                f"Missing required environment variables: {', '.join(missing)}.\n"
+                "Copy .env.example to .env and fill it in (see the development "
+                "plan, Section 7 Step E)."
+            )
+        return cls(
+            project_id=os.environ["GCP_PROJECT_ID"],
+            location=os.getenv("GCP_LOCATION", "US"),
+            bucket=os.environ["GCS_RAW_BUCKET"],
+            prefix=os.getenv("GCS_RAW_PREFIX", "olist/raw/v1").strip("/"),
+            dataset_raw=os.getenv("BQ_DATASET_RAW", "olist_raw"),
+            local_raw_dir=REPO_ROOT / os.getenv("LOCAL_RAW_DIR", "data/raw"),
+            snapshot_date=os.getenv("OLIST_SNAPSHOT_DATE", ""),
+            source_url=os.getenv("OLIST_SOURCE_URL", ""),
+            licence=os.getenv("OLIST_LICENCE", ""),
+        )
+
+
+# --------------------------------------------------------------------------- #
+# manifest
+# --------------------------------------------------------------------------- #
+def sha256_of(path: Path, chunk: int = 1 << 20) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        while block := fh.read(chunk):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def count_data_rows(path: Path) -> int:
+    """Count CSV records, not physical lines.
+
+    olist_order_reviews_dataset.csv contains quoted newlines inside review text,
+    so ``wc -l`` overcounts it. The csv module handles the quoting correctly.
+    """
+    with path.open("r", encoding="utf-8", newline="") as fh:
+        reader = csv.reader(fh)
+        next(reader, None)  # header
+        return sum(1 for _ in reader)
+
+
+def build_manifest(cfg: Config, tables: list[str]) -> dict:
+    entries = []
+    for filename, table in SOURCE_FILES.items():
+        if table not in tables:
+            continue
+        path = cfg.local_raw_dir / filename
+        if not path.exists():
+            raise SystemExit(
+                f"Missing source file: {path}\n"
+                "Download the Olist export from Kaggle into data/raw/ first "
+                "(development plan, Section 7 Step C)."
+            )
+        rows = count_data_rows(path)
+        expected = EXPECTED_ROWS[table]
+        entries.append(
+            {
+                "file": filename,
+                "table": table,
+                "bytes": path.stat().st_size,
+                "sha256": sha256_of(path),
+                "rows": rows,
+                "expected_rows": expected,
+                "rows_match_expected": rows == expected,
+            }
+        )
+        flag = "ok" if rows == expected else f"EXPECTED {expected:,}"
+        log.info("manifest  %-30s %10s rows  %s", table, f"{rows:,}", flag)
+
+    manifest = {
+        "batch_id": uuid.uuid4().hex[:12],
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "source_url": cfg.source_url,
+        "licence": cfg.licence,
+        "snapshot_date": cfg.snapshot_date,
+        "gcs_uri_prefix": f"gs://{cfg.bucket}/{cfg.prefix}",
+        "files": entries,
+    }
+    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n")
+    log.info("manifest written to %s (batch_id=%s)", MANIFEST_PATH, manifest["batch_id"])
+
+    mismatched = [e["table"] for e in entries if not e["rows_match_expected"]]
+    if mismatched:
+        log.warning(
+            "Row counts differ from the published Kaggle counts for: %s. "
+            "Investigate before modelling.",
+            ", ".join(mismatched),
+        )
+    return manifest
+
+
+# --------------------------------------------------------------------------- #
+# cloud
+# --------------------------------------------------------------------------- #
+def assert_location(bq: bigquery.Client, cfg: Config) -> None:
+    """Fail fast if the raw dataset is not in the agreed location.
+
+    A dataset in the wrong region cannot be joined to the others and cannot be
+    moved. Better to stop here than to discover it three models later.
+    """
+    ds = bq.get_dataset(f"{cfg.project_id}.{cfg.dataset_raw}")
+    if ds.location.upper() != cfg.location.upper():
+        raise SystemExit(
+            f"Dataset {cfg.dataset_raw} is in {ds.location}, but this project is "
+            f"pinned to {cfg.location}. Delete and recreate the dataset with "
+            f"`bq --location={cfg.location} mk --dataset ...` before loading."
+        )
+    log.info("dataset %s confirmed in location %s", cfg.dataset_raw, ds.location)
+
+
+def upload(cfg: Config, manifest: dict) -> None:
+    client = storage.Client(project=cfg.project_id)
+    bucket = client.bucket(cfg.bucket)
+    for entry in manifest["files"]:
+        blob = bucket.blob(f"{cfg.prefix}/{entry['file']}")
+        blob.upload_from_filename(cfg.local_raw_dir / entry["file"], content_type="text/csv")
+        log.info("uploaded  %-30s -> gs://%s/%s", entry["table"], cfg.bucket, blob.name)
+
+
+def load_schema(table: str) -> list[bigquery.SchemaField]:
+    fields = json.loads((SCHEMA_DIR / f"{table}.json").read_text())
+    return [
+        bigquery.SchemaField(f["name"], f["type"], mode=f.get("mode", "NULLABLE"))
+        for f in fields
+    ]
+
+
+def load_table(bq: bigquery.Client, cfg: Config, manifest: dict, entry: dict) -> int:
+    table = entry["table"]
+    stage_ref = f"{cfg.project_id}.{cfg.dataset_raw}._stg_{table}"
+    final_ref = f"{cfg.project_id}.{cfg.dataset_raw}.{table}"
+    uri = f"gs://{cfg.bucket}/{cfg.prefix}/{entry['file']}"
+
+    job_config = bigquery.LoadJobConfig(
+        schema=load_schema(table),
+        source_format=bigquery.SourceFormat.CSV,
+        skip_leading_rows=1,
+        # Review comments contain newlines inside quoted fields.
+        allow_quoted_newlines=True,
+        # Reject the whole file rather than silently dropping rows: a partial
+        # load is worse than a failed one because nothing downstream notices.
+        max_bad_records=0,
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+    )
+    bq.load_table_from_uri(uri, stage_ref, job_config=job_config, location=cfg.location).result()
+
+    # Attach ingestion metadata. CSV loads cannot add columns that are absent
+    # from the file, so the raw table is rewritten once from the stage table.
+    bq.query(
+        f"""
+        CREATE OR REPLACE TABLE `{final_ref}` AS
+        SELECT
+            *,
+            @batch_id    AS _batch_id,
+            @loaded_at   AS _loaded_at,
+            @source_uri  AS _source_uri,
+            @sha256      AS _source_sha256
+        FROM `{stage_ref}`
+        """,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("batch_id", "STRING", manifest["batch_id"]),
+                bigquery.ScalarQueryParameter("loaded_at", "TIMESTAMP", manifest["generated_at"]),
+                bigquery.ScalarQueryParameter("source_uri", "STRING", uri),
+                bigquery.ScalarQueryParameter("sha256", "STRING", entry["sha256"]),
+            ]
+        ),
+        location=cfg.location,
+    ).result()
+    bq.query(f"DROP TABLE IF EXISTS `{stage_ref}`", location=cfg.location).result()
+
+    return bq.get_table(final_ref).num_rows
+
+
+def reconcile(manifest: dict, loaded: dict[str, int]) -> bool:
+    header = f"{'table':<30}{'source':>12}{'bigquery':>12}{'delta':>10}  status"
+    print("\n" + header)
+    print("-" * len(header))
+    ok = True
+    for entry in manifest["files"]:
+        src, bq_rows = entry["rows"], loaded[entry["table"]]
+        delta = bq_rows - src
+        status = "OK" if delta == 0 else "MISMATCH"
+        ok &= delta == 0
+        print(f"{entry['table']:<30}{src:>12,}{bq_rows:>12,}{delta:>10,}  {status}")
+    print("-" * len(header))
+    print("RECONCILIATION:", "PASS" if ok else "FAIL", "\n")
+    return ok
+
+
+# --------------------------------------------------------------------------- #
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--manifest-only", action="store_true",
+                        help="compute checksums and row counts without touching the cloud")
+    parser.add_argument("--skip-upload", action="store_true",
+                        help="reuse objects already present in GCS")
+    parser.add_argument("--tables", nargs="*", default=sorted(SOURCE_FILES.values()),
+                        help="subset of raw tables to process")
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-7s %(message)s",
+                        datefmt="%H:%M:%S")
+
+    unknown = set(args.tables) - set(SOURCE_FILES.values())
+    if unknown:
+        raise SystemExit(f"Unknown table(s): {', '.join(sorted(unknown))}")
+
+    cfg = Config.from_env()
+    manifest = build_manifest(cfg, args.tables)
+    if args.manifest_only:
+        log.info("--manifest-only: stopping before any cloud call")
+        return 0
+
+    bq = bigquery.Client(project=cfg.project_id, location=cfg.location)
+    assert_location(bq, cfg)
+
+    if not args.skip_upload:
+        upload(cfg, manifest)
+
+    loaded = {}
+    for entry in manifest["files"]:
+        rows = load_table(bq, cfg, manifest, entry)
+        loaded[entry["table"]] = rows
+        log.info("loaded    %-30s %10s rows", entry["table"], f"{rows:,}")
+
+    return 0 if reconcile(manifest, loaded) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

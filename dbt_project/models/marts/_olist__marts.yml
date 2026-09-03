@@ -1,0 +1,369 @@
+version: 2
+
+models:
+  # =========================================================================
+  # DIMENSIONS
+  # =========================================================================
+  - name: dim_customer
+    description: >
+      GRAIN: one row per PERSON (customer_unique_id), not per order. Olist
+      issues a fresh customer_id for every order, so the naive dimension makes
+      every customer look like a one-time buyer and destroys RFM entirely.
+      SCD Type 1: the export is static, so there is no genuine history to
+      preserve and we do not manufacture any.
+    columns:
+      - name: customer_key
+        description: customer_unique_id. The only correct grain for customer analysis.
+        data_tests: [unique, not_null]
+      - name: customer_state
+        description: Two-letter state code from the customer's most recent order. The destination half of a route.
+        data_tests: [not_null]
+      - name: customer_region
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [Norte, Nordeste, Centro-Oeste, Sudeste, Sul, Unknown]
+      - name: source_customer_id_count
+        description: >
+          How many source customer_ids collapsed into this person. Direct
+          evidence of the identity problem this dimension solves.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                inclusive: true
+      - name: is_repeat_customer
+        description: True where the person placed more than one order.
+
+  - name: dim_seller
+    description: >
+      GRAIN: one row per seller. seller_state is a first-class attribute, not
+      filler: nearly all Olist sellers sit in the Southeast, which is the
+      structural reason distant regions receive orders late.
+    columns:
+      - name: seller_key
+        data_tests: [unique, not_null]
+      - name: seller_state
+        data_tests: [not_null]
+      - name: seller_region
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [Norte, Nordeste, Centro-Oeste, Sudeste, Sul, Unknown]
+
+  - name: dim_product
+    description: >
+      GRAIN: one row per product. Physical attributes are retained because size
+      and weight are plausible confounders for transit time: a bulky category
+      can look like a logistics failure when it is really a product-mix effect.
+    columns:
+      - name: product_key
+        data_tests: [unique, not_null]
+      - name: product_category
+        description: English category name. 'unknown' where the source is null or untranslated.
+        data_tests: [not_null]
+      - name: product_weight_band
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - "Unknown"
+                  - "1. Light (<0.5kg)"
+                  - "2. Medium (0.5-2kg)"
+                  - "3. Heavy (2-10kg)"
+                  - "4. Very heavy (10kg+)"
+
+  - name: dim_date
+    description: >
+      GRAIN: one calendar day, 2016-01-01 to 2018-12-31. Exists so that the
+      "WHEN" half of the business case uses one consistent definition of month,
+      week and weekday everywhere, and so that nothing has to wrap the
+      partition column in a function to derive them.
+    columns:
+      - name: date_key
+        data_tests: [unique, not_null]
+      - name: year_month
+        data_tests: [not_null]
+      - name: is_in_analysis_window
+        description: >
+          Whether the day falls inside the window with usable Olist coverage.
+          Charts use this to trim or annotate the sparse first and last months
+          rather than presenting them as a collapse in demand.
+
+  # =========================================================================
+  # FACTS
+  # =========================================================================
+  - name: fct_orders
+    description: >
+      PRIMARY FACT for the delivery business case. GRAIN: one row per order,
+      modelled as an accumulating snapshot across the milestone chain
+      (purchased, approved, handed to carrier, delivered, against promised).
+      Lateness is a property of a shipment, not of a line within it, which is
+      why it lives here and not on fct_order_items. Partitioned by
+      order_purchase_date, clustered on customer_state, seller_state and
+      order_status.
+    columns:
+      - name: order_key
+        description: Primary key. One row per order.
+        data_tests: [unique, not_null]
+      - name: customer_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_customer')
+                field: customer_key
+      - name: seller_key
+        description: The primary seller, meaning the one contributing the most revenue to the order.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_seller')
+                field: seller_key
+      - name: order_date_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: order_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [delivered, shipped, canceled, unavailable, invoiced, processing, created, approved]
+      - name: delivery_route
+        description: seller_state to customer_state. The unit of analysis for the WHERE question.
+      - name: order_revenue
+        description: Sum of item price for the order. Freight excluded by definition.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: order_freight
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: total_delivery_days
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 240
+                inclusive: true
+      - name: delay_vs_promise_days
+        description: The measure the headline late rate is derived from. Negative means early.
+      - name: is_late
+        description: NULL for undelivered orders, never false. Consumers must filter to delivered orders explicitly.
+      - name: review_score
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+      - name: late_order_revenue
+        description: order_revenue where the order was late, NULL otherwise, so a plain SUM answers "revenue delivered late".
+
+  - name: fct_order_items
+    description: >
+      GRAIN: one row per item line. The revenue backbone and the only correct
+      grain for product and seller analysis. Carries no delivery measures on
+      purpose: averaging delay across item lines would weight multi-item orders
+      incorrectly.
+    columns:
+      - name: order_item_key
+        data_tests: [unique, not_null]
+      - name: order_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('fct_orders')
+                field: order_key
+      - name: product_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: product_key
+      - name: seller_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_seller')
+                field: seller_key
+      - name: customer_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_customer')
+                field: customer_key
+      - name: item_price
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: freight_value
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+
+  - name: fct_payments
+    description: >
+      GRAIN: one row per payment record. A separate fact table on purpose:
+      payments and order items are two independent many-to-one relationships
+      with the order, so combining them would create a many-to-many join and
+      multiply money by the product of both counts.
+    columns:
+      - name: payment_key
+        data_tests: [unique, not_null]
+      - name: order_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('fct_orders')
+                field: order_key
+      - name: payment_value
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+
+  # =========================================================================
+  # AGGREGATES
+  # =========================================================================
+  - name: agg_delivery_by_route
+    description: >
+      ANSWERS "WHERE are deliveries late?". GRAIN: one row per
+      seller_state to customer_state route. Delivered orders only, because an
+      order that never arrived has no lateness value and including it would
+      understate the rate. Medians and p90 rather than means, so outliers
+      cannot define a state's reputation.
+    columns:
+      - name: delivery_route
+        data_tests: [unique, not_null]
+      - name: late_rate
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: true
+      - name: is_reportable
+        description: Whether the route clears the min_orders_for_reporting threshold. Low-volume routes stay in the table so totals reconcile, but charts suppress them.
+
+  - name: agg_delivery_monthly
+    description: >
+      ANSWERS "WHEN are deliveries late?". GRAIN: one row per purchase month.
+      Bucketed by purchase month, not delivery month: the business question is
+      "if I order in November, what happens to me?", and bucketing by delivery
+      would push a November problem into December.
+    columns:
+      - name: year_month
+        data_tests: [unique, not_null]
+      - name: late_rate
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: true
+
+  - name: agg_monthly_sales
+    description: >
+      BRIEF REQUIREMENT: monthly sales trends. GRAIN: one row per purchase
+      month. Revenue and order counts are aggregated separately at their own
+      natural grains and joined only once both are scalars per month, which is
+      what prevents revenue being multiplied by the item count. The late rate is
+      joined in so revenue and service quality can be read on one chart.
+    columns:
+      - name: year_month
+        data_tests: [unique, not_null]
+      - name: revenue
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: order_count
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+
+  - name: agg_product_performance
+    description: >
+      BRIEF REQUIREMENT: top-selling products. GRAIN: one row per product
+      category. Reports revenue, units and distinct orders together, because
+      ranking on revenue alone flatters high-price, low-volume categories.
+      Delivery columns are attached so that categories which sell well but ship
+      badly become visible. Note that delivered_orders sums to more than the
+      total order count, because an order spanning two categories counts in
+      both; the sales measures are unaffected.
+    columns:
+      - name: product_category
+        data_tests: [unique, not_null]
+      - name: revenue
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: is_high_value_poor_delivery
+        description: Top-10 revenue category with an above-average late rate. The headline cross-read of this project.
+
+  - name: agg_customer_rfm
+    description: >
+      BRIEF REQUIREMENT: customer segmentation. GRAIN: one row per person
+      (customer_unique_id). Recency is measured against the olist_snapshot_date
+      project var, never CURRENT_DATE, so the segmentation is reproducible and
+      does not mark every customer dormant. Delivery columns quantify how much
+      high-value revenue is exposed to late delivery.
+    columns:
+      - name: customer_key
+        data_tests: [unique, not_null]
+      - name: recency_days
+        description: Days between the customer's latest order and the dataset snapshot date.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: frequency
+        description: Distinct orders. Counted from fct_orders, which is already one row per order.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                inclusive: true
+      - name: monetary
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: rfm_segment
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - "1. Champions"
+                  - "2. High value, recent"
+                  - "3. At risk, high value"
+                  - "4. New / promising"
+                  - "5. Dormant, low value"
+                  - "6. Occasional"
+      - name: is_high_value_with_late_delivery
+        description: High-monetary customer with at least one late order. The most expensive churn risk in the dataset.

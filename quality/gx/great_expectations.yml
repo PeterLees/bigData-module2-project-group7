@@ -1,0 +1,193 @@
+# Welcome to Great Expectations! Always know what to expect from your data.
+#
+# Here you can define datasources, batch kwargs generators, integrations and
+# more. This file is intended to be committed to your repo. For help with
+# configuration please:
+#   - Read our docs: https://docs.greatexpectations.io/docs/guides/connecting_to_your_data/connect_to_data_overview/#2-configure-your-datasource
+#   - Join our slack channel: http://greatexpectations.io/slack
+
+# config_version refers to the syntactic version of this config file, and is used in maintaining backwards compatibility
+# It is auto-generated and usually does not need to be changed.
+config_version: 4.0
+
+# This config file supports variable substitution which enables: 1) keeping
+# secrets out of source control & 2) environment-based configuration changes
+# such as staging vs prod.
+#
+# When GX encounters substitution syntax (like `my_key: ${my_value}` or
+# `my_key: $my_value`) in the great_expectations.yml file, it will attempt
+# to replace the value of `my_key` with the value from an environment
+# variable `my_value` or a corresponding key read from this config file,
+# which is defined through the `config_variables_file_path`.
+# Environment variables take precedence over variables defined here.
+#
+# Substitution values defined here can be a simple (non-nested) value,
+# nested value such as a dictionary, or an environment variable (i.e. ${ENV_VAR})
+#
+#
+# https://docs.greatexpectations.io/docs/guides/setup/configuring_data_contexts/how_to_configure_credentials
+
+
+config_variables_file_path: uncommitted/config_variables.yml
+
+# The plugins_directory will be added to your python path for custom modules
+# used to override and extend Great Expectations.
+plugins_directory: plugins/
+
+stores:
+# Stores are configurable places to store things like Expectations, Validations
+# Data Docs, and more. These are for advanced users only - most users can simply
+# leave this section alone.
+  expectations_store:
+    class_name: ExpectationsStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: expectations/
+
+  validation_results_store:
+    class_name: ValidationResultsStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: uncommitted/validations/
+
+  checkpoint_store:
+    class_name: CheckpointStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      suppress_store_backend_id: true
+      base_directory: checkpoints/
+
+  validation_definition_store:
+    class_name: ValidationDefinitionStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: validation_definitions/
+
+expectations_store_name: expectations_store
+validation_results_store_name: validation_results_store
+checkpoint_store_name: checkpoint_store
+
+data_docs_sites:
+  # Data Docs make it simple to visualize data quality in your project. These
+  # include Expectations, Validations & Profiles. The are built for all
+  # Datasources from JSON artifacts in the local repo including validations &
+  # profiles from the uncommitted directory. Read more at https://docs.greatexpectations.io/docs/terms/data_docs
+  local_site:
+    class_name: SiteBuilder
+    show_how_to_buttons: true
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: uncommitted/data_docs/local_site/
+    site_index_builder:
+      class_name: DefaultSiteIndexBuilder
+fluent_datasources:
+  olist_files__orders:
+    type: pandas
+    id: 5712259f-153c-4ccc-8730-f038974a6470
+    assets:
+      orders:
+        type: dataframe
+        id: 7a43f86e-99fc-4852-9d9c-11228343a98c
+        batch_metadata: {}
+        batch_definitions:
+          batch__orders:
+            id: 40ef21e1-168f-4865-bba2-3f25d8cbed69
+            partitioner:
+  olist_files__order_items:
+    type: pandas
+    id: 50bb6b76-ecca-4236-bda8-10d694bb6fc3
+    assets:
+      order_items:
+        type: dataframe
+        id: a4a4e98f-9ca1-409d-b370-73335402679d
+        batch_metadata: {}
+        batch_definitions:
+          batch__order_items:
+            id: 0bb3e778-c474-43b8-9ece-72706e307570
+            partitioner:
+  olist_files__order_payments:
+    type: pandas
+    id: eed9f0ce-fc57-4b5c-af3d-cc45706a80e4
+    assets:
+      order_payments:
+        type: dataframe
+        id: 810ba49a-905f-4248-8a99-791665dae6c9
+        batch_metadata: {}
+        batch_definitions:
+          batch__order_payments:
+            id: 8031b9b6-5cbb-417e-b064-7dc99be314b8
+            partitioner:
+  olist_files__order_reviews:
+    type: pandas
+    id: 109f08cf-3b90-4f54-b5fc-70675ab4ad77
+    assets:
+      order_reviews:
+        type: dataframe
+        id: 7a5add67-d7ca-493b-a2e7-d700198b04f1
+        batch_metadata: {}
+        batch_definitions:
+          batch__order_reviews:
+            id: 8e34796e-88a1-4685-af61-19fb9d97a352
+            partitioner:
+  olist_files__customers:
+    type: pandas
+    id: 110aafdc-12b8-45bd-9f83-b2c5c79b3caf
+    assets:
+      customers:
+        type: dataframe
+        id: 5ec160d4-1aa5-42e5-9f38-39dc48e9b8a4
+        batch_metadata: {}
+        batch_definitions:
+          batch__customers:
+            id: b786c5c8-9ef1-4c73-9184-07c6ee464d22
+            partitioner:
+  olist_files__products:
+    type: pandas
+    id: 9786646b-9e84-46fb-af10-3ddade2c1af4
+    assets:
+      products:
+        type: dataframe
+        id: ce28ac71-c837-4236-ac97-fa5d8ae5a197
+        batch_metadata: {}
+        batch_definitions:
+          batch__products:
+            id: 3d3c3764-b975-43e3-bc13-61ae60da8782
+            partitioner:
+  olist_files__sellers:
+    type: pandas
+    id: 44aa1f16-7aa4-4e39-84d4-f0189293bbb6
+    assets:
+      sellers:
+        type: dataframe
+        id: 7164be22-c083-4917-86a6-360314640eb2
+        batch_metadata: {}
+        batch_definitions:
+          batch__sellers:
+            id: de969e09-9d1e-4491-b85e-53da5ba231fa
+            partitioner:
+  olist_files__geolocation:
+    type: pandas
+    id: c398083a-2d32-4209-98f2-6fffd948812e
+    assets:
+      geolocation:
+        type: dataframe
+        id: fa0afa32-4e10-4364-8b50-4b377a6e5418
+        batch_metadata: {}
+        batch_definitions:
+          batch__geolocation:
+            id: 1c1b7f58-0970-48ca-9f63-b78c7290a667
+            partitioner:
+  olist_files__product_category_translation:
+    type: pandas
+    id: bbaf4ecb-150c-41f9-8a06-31821e83d6a9
+    assets:
+      product_category_translation:
+        type: dataframe
+        id: 81458f8e-0458-432c-b06f-17f27c85b427
+        batch_metadata: {}
+        batch_definitions:
+          batch__product_category_translation:
+            id: 72a00ed8-210a-41a4-8398-d14bcd0f7ca2
+            partitioner:
+analytics_enabled:
+data_context_id: 8dfe8ed8-37cc-4d80-b0cf-a0ebc0c43ed9

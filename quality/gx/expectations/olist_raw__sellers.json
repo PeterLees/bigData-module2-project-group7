@@ -1,0 +1,61 @@
+{
+  "expectations": [
+    {
+      "id": "212ad03c-8685-4aa0-b20f-33bc2d3f8e42",
+      "kwargs": {
+        "column_set": [
+          "seller_id",
+          "seller_zip_code_prefix",
+          "seller_city",
+          "seller_state"
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_table_columns_to_match_set"
+    },
+    {
+      "id": "0a950224-0c1f-46ff-bae4-de06b0f7b63c",
+      "kwargs": {
+        "value": 3095
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_table_row_count_to_equal"
+    },
+    {
+      "id": "aedb1841-66fd-4f35-9ee9-70531f8c4e64",
+      "kwargs": {
+        "column": "seller_id"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "3ed2851c-ea10-4b70-84ed-dfca22280d0a",
+      "kwargs": {
+        "column": "seller_state"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "0d13d528-65c6-4625-aced-eccc5b49ab26",
+      "kwargs": {
+        "column": "seller_state",
+        "value": 2.0
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_value_lengths_to_equal"
+    }
+  ],
+  "id": "8f97da2a-99bf-4395-9491-5040c7811bdd",
+  "meta": {
+    "great_expectations_version": "1.22.0"
+  },
+  "name": "olist_raw__sellers",
+  "notes": null
+}
