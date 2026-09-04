@@ -34,7 +34,9 @@ import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
+from google.api_core.exceptions import GoogleAPICallError, RetryError
 from google.cloud import bigquery, storage
+from google.cloud.storage.retry import DEFAULT_RETRY
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
@@ -200,13 +202,84 @@ def assert_location(bq: bigquery.Client, cfg: Config) -> None:
     log.info("dataset %s confirmed in location %s", cfg.dataset_raw, ds.location)
 
 
+# The client library's own retry budget for a resumable upload defaults to a
+# 120-SECOND TOTAL DEADLINE across every chunk-transmit attempt. The largest
+# Olist file, geolocation, is ~58 MB -- more than 3.5x the next largest -- and
+# on a slower or less stable connection (a dorm/campus network, a VPN, a
+# corporate proxy that inspects long-lived HTTPS PUTs) that budget is
+# genuinely not enough, producing exactly the RetryError a team member hit:
+# "Timeout of 120.0s exceeded ... TimeoutError('The write operation timed out')".
+# This is not a bug the retry can paper over by trying harder within the same
+# 120s; it needs a longer budget. 600s (10 minutes) comfortably covers even a
+# slow upload of the largest file without masking a genuinely dead connection.
+# Derived from the library's own DEFAULT_RETRY (deadline 120.0) rather than
+# hand-built, so the retryable-error predicate and backoff curve stay exactly
+# what google-cloud-storage itself considers safe to retry -- only the total
+# time budget changes.
+_UPLOAD_RETRY = DEFAULT_RETRY.with_deadline(600.0)
+_UPLOAD_TIMEOUT = (60, 600)  # (connect, read) seconds, per HTTP request
+
+
 def upload(cfg: Config, manifest: dict) -> None:
     client = storage.Client(project=cfg.project_id)
     bucket = client.bucket(cfg.bucket)
+
     for entry in manifest["files"]:
-        blob = bucket.blob(f"{cfg.prefix}/{entry['file']}")
-        blob.upload_from_filename(cfg.local_raw_dir / entry["file"], content_type="text/csv")
-        log.info("uploaded  %-30s -> gs://%s/%s", entry["table"], cfg.bucket, blob.name)
+        blob_name = f"{cfg.prefix}/{entry['file']}"
+        local_path = cfg.local_raw_dir / entry["file"]
+
+        # Skip files that are already correctly in GCS. Without this, retrying
+        # `make ingest` after ANY file fails re-uploads all nine from scratch --
+        # including the ones that already succeeded -- which on a slow
+        # connection can turn one bad file into ten minutes of wasted re-upload
+        # for files that were already fine.
+        #
+        # bucket.get_blob() does the existence check AND fetches metadata (incl.
+        # .size) in a single call, returning None if the object is absent --
+        # bucket.blob() alone only builds a local, unpopulated reference and
+        # .size would be None until a separate .reload(). Comparing byte size is
+        # sufficient here: a partial/failed upload never lands at the exact
+        # right size, and the manifest's sha256 is verified again once the file
+        # is loaded into BigQuery downstream.
+        existing = bucket.get_blob(blob_name, retry=DEFAULT_RETRY.with_deadline(30.0))
+        if existing is not None and existing.size == entry["bytes"]:
+            log.info("skip      %-30s already in gs://%s/%s (%s bytes)",
+                      entry["table"], cfg.bucket, blob_name, f"{existing.size:,}")
+            continue
+
+        blob = bucket.blob(blob_name)
+        for attempt in (1, 2, 3):
+            try:
+                blob.upload_from_filename(
+                    local_path,
+                    content_type="text/csv",
+                    timeout=_UPLOAD_TIMEOUT,
+                    retry=_UPLOAD_RETRY,
+                )
+                log.info("uploaded  %-30s -> gs://%s/%s", entry["table"], cfg.bucket, blob.name)
+                break
+            except (RetryError, GoogleAPICallError, TimeoutError, ConnectionError) as exc:
+                if attempt == 3:
+                    raise SystemExit(
+                        f"\nUpload of {entry['file']} ({entry['bytes']:,} bytes) failed after "
+                        f"3 attempts: {exc}\n\n"
+                        "This is a network problem between this machine and Google Cloud "
+                        "Storage, not a bug in the data or the pipeline. Things worth trying:\n"
+                        "  - Re-run `make ingest` -- files already uploaded successfully are "
+                        "now skipped, so a retry only has to finish the one that failed.\n"
+                        "  - Try a wired connection, or a different network, if you are on "
+                        "campus/dorm wifi, a VPN, or behind a corporate proxy that inspects "
+                        "long HTTPS uploads.\n"
+                        "  - Temporarily disable antivirus/firewall software that inspects "
+                        "outbound HTTPS traffic -- this is a common cause of exactly this "
+                        "failure on Windows.\n"
+                        f"  - Upload the large file manually and rerun: "
+                        f"gsutil cp \"{local_path}\" gs://{cfg.bucket}/{cfg.prefix}/{entry['file']}"
+                    ) from exc
+                log.warning(
+                    "upload attempt %d/3 for %s failed (%s); retrying...",
+                    attempt, entry["file"], type(exc).__name__,
+                )
 
 
 def load_schema(table: str) -> list[bigquery.SchemaField]:
